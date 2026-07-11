@@ -238,14 +238,17 @@ impl Default for Config {
 }
 
 impl Config {
-    pub async fn read_config() -> Result<Config, ConfigError> {
+    pub async fn read_config() -> Result<Self, ConfigError> {
         if !fs::try_exists(CONFIG_FILE_PATH.as_path()).await? {
             Config::default().write_config().await?
         }
 
         let contents = fs::read_to_string(CONFIG_FILE_PATH.as_path()).await?;
 
-        Ok(toml::from_str(&contents)?)
+        let mut config = toml::from_str::<Config>(&contents)?;
+        config.normalize();
+
+        Ok(config)
     }
 
     pub async fn write_config(&self) -> Result<(), ConfigError> {
@@ -256,6 +259,15 @@ impl Config {
         fs::write(CONFIG_FILE_PATH.as_path(), toml::to_string_pretty(&self)?).await?;
 
         Ok(())
+    }
+
+    fn normalize(&mut self) {
+        self.multi_thread = self.multi_thread.clamp(1, 5);
+        self.multi_downloading_segment = self.multi_downloading_segment.clamp(1, 5);
+
+        if self.quantity_of_logs < 1 {
+            self.quantity_of_logs = 1
+        }
     }
 }
 
@@ -354,6 +366,41 @@ mod test {
         let config = Config::read_config().await?;
 
         assert_eq!(config, expected);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn read_config_normalizes_out_of_range_values() -> Result<(), Box<dyn Error>> {
+        let _config_file = TestConfigFile::new();
+        let cases = [(0, 0, 0, 1, 1, 1), (6, 6, 7, 5, 5, 7)];
+
+        for (
+            multi_thread,
+            multi_downloading_segment,
+            quantity_of_logs,
+            expected_multi_thread,
+            expected_multi_downloading_segment,
+            expected_quantity_of_logs,
+        ) in cases
+        {
+            let config = Config {
+                multi_thread,
+                multi_downloading_segment,
+                quantity_of_logs,
+                ..Config::default()
+            };
+            fs::write(CONFIG_FILE_PATH.as_path(), toml::to_string_pretty(&config)?).await?;
+
+            let normalized = Config::read_config().await?;
+
+            assert_eq!(normalized.multi_thread, expected_multi_thread);
+            assert_eq!(
+                normalized.multi_downloading_segment,
+                expected_multi_downloading_segment
+            );
+            assert_eq!(normalized.quantity_of_logs, expected_quantity_of_logs);
+        }
 
         Ok(())
     }
