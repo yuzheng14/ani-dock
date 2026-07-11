@@ -67,6 +67,33 @@ impl SnList {
     }
 }
 
+impl IntoIterator for SnList {
+    type Item = SnDetail;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a SnList {
+    type Item = &'a SnDetail;
+    type IntoIter = std::slice::Iter<'a, SnDetail>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut SnList {
+    type Item = &'a mut SnDetail;
+    type IntoIter = std::slice::IterMut<'a, SnDetail>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter_mut()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::{error::Error, sync::Mutex};
