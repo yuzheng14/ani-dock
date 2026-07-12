@@ -30,6 +30,22 @@ pub enum CookieError {
 }
 
 #[derive(Debug, Error)]
+pub enum RequestError {
+    #[error("encounter error when build request client or request: {0}")]
+    WreqError(#[from] wreq::Error),
+    #[error("encounter error when parse url from other type: {0}")]
+    UrlParseError(#[from] url::ParseError),
+}
+
+#[derive(Debug, Error)]
+pub enum AnimeEpisodeError {
+    #[error("encounter error when parsing anime episode: {0}")]
+    WreqError(#[from] wreq::Error),
+    #[error("encounter error when parsing anime episode's html: {0}")]
+    ParseHtmlError(String),
+}
+
+#[derive(Debug, Error)]
 pub enum Error {
     #[error(transparent)]
     ConfigError(#[from] ConfigError),
@@ -37,4 +53,8 @@ pub enum Error {
     SnListError(#[from] SnListError),
     #[error(transparent)]
     CookieError(#[from] CookieError),
+    #[error(transparent)]
+    RequestError(#[from] RequestError),
+    #[error(transparent)]
+    AnimeEpisodeError(#[from] AnimeEpisodeError),
 }

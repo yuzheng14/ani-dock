@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::LazyLock};
+use std::{path::PathBuf, str, sync::LazyLock};
 
 pub static APP_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     directories::UserDirs::new()
@@ -28,6 +28,11 @@ pub static DB_FILE_PATH: LazyLock<PathBuf> = LazyLock::new(|| APP_DIR.join("data
 pub static COOKIE_FILE_PATH: LazyLock<PathBuf> = LazyLock::new(|| APP_DIR.join("cookie.txt"));
 #[cfg(test)]
 pub static COOKIE_FILE_PATH: LazyLock<PathBuf> = LazyLock::new(|| APP_DIR.join("cookie.test.txt"));
+
+/// 动画疯域名 ORIGIN
+///
+/// https://ani.gamer.com.tw
+pub const ORIGIN: &str = "https://ani.gamer.com.tw";
 
 #[cfg(test)]
 mod test {

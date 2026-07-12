@@ -1,0 +1,875 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>aniGamerPlus 核心调用图谱</title>
+  <style>
+    :root {
+      --ink: #162033;
+      --muted: #61708a;
+      --paper: #f5f7fb;
+      --panel: #ffffff;
+      --line: #d9e0eb;
+      --navy: #152943;
+      --cyan: #19a9a2;
+      --cyan-soft: #dff5f2;
+      --amber: #eea83b;
+      --amber-soft: #fff1d7;
+      --coral: #e66d61;
+      --coral-soft: #fde9e6;
+      --violet: #7765ba;
+      --violet-soft: #eeeafd;
+      --code: #edf2f7;
+      --shadow: 0 18px 48px rgba(32, 53, 78, .10);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(rgba(26, 63, 91, .035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(26, 63, 91, .035) 1px, transparent 1px),
+        var(--paper);
+      background-size: 28px 28px;
+      font-family: "Avenir Next", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.65;
+    }
+
+    button, input { font: inherit; }
+    a { color: inherit; }
+    code, .mono {
+      font-family: "SFMono-Regular", "Cascadia Code", "JetBrains Mono", Consolas, monospace;
+    }
+
+    .skip-link {
+      position: fixed;
+      left: 16px;
+      top: -80px;
+      z-index: 30;
+      padding: 10px 14px;
+      border-radius: 10px;
+      color: white;
+      background: var(--navy);
+    }
+    .skip-link:focus { top: 16px; }
+
+    .hero {
+      position: relative;
+      min-height: 640px;
+      overflow: hidden;
+      color: #f8fbff;
+      background: var(--navy);
+    }
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: .28;
+      background:
+        radial-gradient(circle at 72% 22%, rgba(25, 169, 162, .75), transparent 24%),
+        radial-gradient(circle at 18% 82%, rgba(238, 168, 59, .42), transparent 26%),
+        repeating-linear-gradient(117deg, transparent 0 34px, rgba(255,255,255,.04) 35px 36px);
+    }
+    .hero-inner {
+      position: relative;
+      z-index: 1;
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 82px 0 70px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(410px, .95fr);
+      gap: 70px;
+      align-items: center;
+    }
+    .hero-inner > * { min-width: 0; }
+    .eyebrow {
+      display: inline-flex;
+      gap: 9px;
+      align-items: center;
+      margin: 0 0 22px;
+      color: #9ce7df;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+    .eyebrow::before {
+      content: "";
+      width: 32px;
+      height: 2px;
+      background: currentColor;
+    }
+    h1 {
+      margin: 0;
+      max-width: 760px;
+      font-size: clamp(52px, 7vw, 92px);
+      font-weight: 850;
+      line-height: .96;
+      letter-spacing: -.065em;
+    }
+    h1 span { color: #52d8cd; }
+    .hero-lead {
+      max-width: 650px;
+      margin: 30px 0 0;
+      color: #cbd7e5;
+      font-size: 18px;
+    }
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      margin-top: 32px;
+    }
+    .hero-meta span {
+      max-width: 100%;
+      padding: 8px 12px;
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 999px;
+      color: #dce6f0;
+      background: rgba(255,255,255,.055);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    .signal-board {
+      position: relative;
+      padding: 24px;
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 26px;
+      background: rgba(9, 26, 46, .58);
+      box-shadow: 0 30px 70px rgba(0,0,0,.28);
+      backdrop-filter: blur(10px);
+    }
+    .board-top {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      color: #8ea5bd;
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .leds { display: flex; gap: 7px; }
+    .leds i { width: 8px; height: 8px; border-radius: 50%; background: #39526c; }
+    .leds i:first-child { background: var(--coral); }
+    .leds i:nth-child(2) { background: var(--amber); }
+    .leds i:last-child { background: #45c5aa; }
+    .trace {
+      position: absolute;
+      left: 58px;
+      top: 78px;
+      bottom: 58px;
+      width: 2px;
+      background: #314c66;
+    }
+    .trace::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(transparent, #56ded3, transparent);
+      transform: translateY(-100%);
+      animation: scan 3.8s ease-in-out infinite;
+    }
+    @keyframes scan { 0% { transform: translateY(-100%); } 65%,100% { transform: translateY(100%); } }
+    .signal-step {
+      position: relative;
+      display: grid;
+      grid-template-columns: 52px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      min-height: 67px;
+    }
+    .signal-step b {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      margin-left: 24px;
+      border: 5px solid #19324c;
+      border-radius: 50%;
+      background: #51d5cb;
+      box-shadow: 0 0 0 1px #51d5cb;
+    }
+    .signal-step strong { display: block; color: #eef6ff; font-size: 14px; }
+    .signal-step small { display: block; color: #829bb4; font-size: 11px; }
+    .signal-step em { color: #6f89a3; font-size: 11px; font-style: normal; }
+
+    .shell {
+      width: min(1240px, calc(100% - 40px));
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 230px minmax(0, 1fr);
+      gap: 46px;
+      align-items: start;
+    }
+    .toc {
+      position: sticky;
+      top: 24px;
+      margin-top: 74px;
+      padding: 18px 0;
+      border-left: 1px solid var(--line);
+    }
+    .toc p { margin: 0 0 10px 18px; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .12em; }
+    .toc a {
+      display: block;
+      padding: 7px 18px;
+      border-left: 2px solid transparent;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 13px;
+      transition: .2s ease;
+    }
+    .toc a:hover, .toc a.active { color: var(--ink); border-left-color: var(--cyan); background: linear-gradient(90deg, var(--cyan-soft), transparent); }
+
+    main { min-width: 0; padding: 74px 0 100px; }
+    section { scroll-margin-top: 28px; margin-bottom: 92px; }
+    .section-kicker { margin: 0 0 6px; color: var(--cyan); font-size: 12px; font-weight: 850; letter-spacing: .14em; text-transform: uppercase; }
+    h2 { margin: 0; font-size: clamp(31px, 4vw, 48px); line-height: 1.1; letter-spacing: -.04em; }
+    .section-intro { max-width: 780px; margin: 16px 0 30px; color: var(--muted); font-size: 16px; }
+    h3 { margin: 0; font-size: 21px; letter-spacing: -.02em; }
+    h4 { margin: 0; font-size: 15px; }
+
+    .scope-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .scope-card {
+      min-height: 160px;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: 0 8px 24px rgba(32,53,78,.04);
+    }
+    .scope-card .mark { display: inline-grid; place-items: center; width: 34px; height: 34px; margin-bottom: 22px; border-radius: 10px; background: var(--cyan-soft); color: #087d78; font-weight: 900; }
+    .scope-card:nth-child(2) .mark { color: #9a6110; background: var(--amber-soft); }
+    .scope-card:nth-child(3) .mark { color: #a4423a; background: var(--coral-soft); }
+    .scope-card:nth-child(4) .mark { color: #57439e; background: var(--violet-soft); }
+    .scope-card p { margin: 7px 0 0; color: var(--muted); font-size: 13px; }
+
+    .boundary {
+      margin-top: 20px;
+      padding: 18px 20px;
+      border-left: 4px solid var(--amber);
+      border-radius: 4px 14px 14px 4px;
+      background: var(--amber-soft);
+      font-size: 14px;
+    }
+    .boundary strong { color: #8f5808; }
+
+    .map {
+      display: grid;
+      grid-template-columns: 1fr 70px 1.25fr 70px 1fr;
+      align-items: stretch;
+      gap: 0;
+      margin-top: 30px;
+    }
+    .map-col { display: grid; gap: 12px; }
+    .map-label { margin-bottom: 3px; color: var(--muted); font-size: 11px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+    .module {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: white;
+    }
+    .module.primary { border-color: #76cfc7; box-shadow: inset 0 4px 0 var(--cyan), var(--shadow); }
+    .module.surface { opacity: .64; border-style: dashed; }
+    .module code { color: var(--cyan); font-size: 12px; }
+    .module p { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+    .arrow { display: grid; place-items: center; color: #93a3b6; font-size: 24px; }
+
+    .journey {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: white;
+      box-shadow: var(--shadow);
+    }
+    .journey-tabs {
+      display: flex;
+      overflow-x: auto;
+      border-bottom: 1px solid var(--line);
+      scrollbar-width: thin;
+    }
+    .journey-tab {
+      flex: 0 0 auto;
+      min-width: 122px;
+      padding: 15px 14px;
+      border: 0;
+      border-right: 1px solid var(--line);
+      color: var(--muted);
+      background: #f8fafc;
+      cursor: pointer;
+      text-align: left;
+    }
+    .journey-tab span { display: block; font: 750 10px/1.2 "SFMono-Regular", monospace; color: #91a0b3; }
+    .journey-tab.active { color: var(--ink); background: white; box-shadow: inset 0 3px 0 var(--cyan); }
+    .journey-panel { display: none; grid-template-columns: .8fr 1.2fr; min-height: 300px; }
+    .journey-panel.active { display: grid; }
+    .journey-copy { padding: 30px; background: linear-gradient(145deg, #f7fbfc, white); }
+    .journey-copy .pill { display: inline-block; padding: 5px 9px; border-radius: 999px; color: #087d78; background: var(--cyan-soft); font-size: 11px; font-weight: 800; }
+    .journey-copy h3 { margin-top: 16px; font-size: 26px; }
+    .journey-copy p { color: var(--muted); }
+    .io { display: grid; gap: 10px; padding: 30px; background: #17283e; color: #e8f1fa; }
+    .io-row { display: grid; grid-template-columns: 74px 1fr; gap: 14px; }
+    .io-row b { color: #6ed8d0; font-size: 11px; letter-spacing: .08em; }
+    .io-row code { color: #d8e5f0; font-size: 12px; white-space: normal; overflow-wrap: anywhere; }
+    .io .chain { align-self: end; padding-top: 18px; border-top: 1px solid #31455d; color: #9fb2c6; font-size: 12px; }
+    .chain strong { color: #f0b557; }
+
+    .flow-list { display: grid; gap: 16px; }
+    details.flow {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: white;
+    }
+    details.flow[open] { box-shadow: 0 12px 30px rgba(32,53,78,.07); }
+    .flow summary {
+      display: grid;
+      grid-template-columns: 46px 1fr auto;
+      gap: 16px;
+      align-items: center;
+      padding: 19px 22px;
+      cursor: pointer;
+      list-style: none;
+    }
+    .flow summary::-webkit-details-marker { display: none; }
+    .flow-no { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px; color: #087d78; background: var(--cyan-soft); font: 800 12px/1 monospace; }
+    .flow summary small { color: var(--muted); }
+    .flow summary::after { content: "+"; color: var(--muted); font-size: 22px; }
+    .flow[open] summary::after { content: "−"; }
+    .flow-body { padding: 0 22px 24px 84px; }
+    .callline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+    .callline code { padding: 6px 8px; border-radius: 7px; color: #24435c; background: var(--code); font-size: 11px; }
+    .callline i { color: var(--amber); font-style: normal; }
+    .flow-body ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+    .flow-body li + li { margin-top: 7px; }
+
+    .catalog-tools {
+      position: sticky;
+      top: 0;
+      z-index: 6;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      padding: 12px;
+      margin: 0 -12px 20px;
+      background: rgba(245,247,251,.92);
+      backdrop-filter: blur(10px);
+    }
+    .search-wrap { position: relative; }
+    .search-wrap::before { content: "⌕"; position: absolute; left: 15px; top: 8px; color: var(--muted); font-size: 20px; }
+    #functionSearch {
+      width: 100%;
+      padding: 12px 14px 12px 42px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      color: var(--ink);
+      background: white;
+      outline: none;
+    }
+    #functionSearch:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(25,169,162,.12); }
+    .filters { display: flex; gap: 6px; }
+    .filter {
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      color: var(--muted);
+      background: white;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .filter.active { border-color: var(--navy); color: white; background: var(--navy); }
+    .module-group { margin: 0 0 26px; }
+    .module-head { display: flex; align-items: end; justify-content: space-between; padding: 0 4px 10px; }
+    .module-head p { margin: 0; color: var(--muted); font-size: 12px; }
+    .function-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .function-card {
+      min-width: 0;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: white;
+      transition: transform .18s ease, border-color .18s ease;
+    }
+    .function-card:hover { transform: translateY(-2px); border-color: #9bcfc9; }
+    .function-card.hidden, .module-group.hidden { display: none; }
+    .fn-top { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
+    .fn-name { min-width: 0; color: #183f5b; font-size: 12px; font-weight: 780; overflow-wrap: anywhere; }
+    .visibility { flex: 0 0 auto; padding: 3px 6px; border-radius: 6px; color: #76522a; background: var(--amber-soft); font-size: 9px; font-weight: 850; letter-spacing: .08em; }
+    .visibility.public { color: #087d78; background: var(--cyan-soft); }
+    .fn-summary { margin: 10px 0 12px; color: var(--muted); font-size: 13px; }
+    .contract { display: grid; gap: 7px; padding-top: 11px; border-top: 1px dashed var(--line); }
+    .contract div { display: grid; grid-template-columns: 46px 1fr; gap: 8px; color: #53627a; font-size: 11px; }
+    .contract b { color: #8a97a9; font-weight: 800; }
+    .contract code { overflow-wrap: anywhere; white-space: normal; }
+
+    .example {
+      display: grid;
+      grid-template-columns: .8fr 1.2fr;
+      overflow: hidden;
+      border-radius: 22px;
+      background: #152943;
+      box-shadow: var(--shadow);
+    }
+    .example-copy { padding: 30px; color: white; }
+    .example-copy p { color: #b9c8d8; }
+    .example-copy .big-sn { margin: 32px 0 8px; color: #59dbd0; font: 850 clamp(44px, 7vw, 80px)/1 monospace; letter-spacing: -.08em; }
+    .example-code { padding: 28px; background: #0f1e30; color: #d8e5f0; overflow-x: auto; }
+    .example-code pre { margin: 0; font: 12px/1.9 "SFMono-Regular", monospace; }
+    .c-cyan { color: #65ddd3; }
+    .c-amber { color: #f3bc62; }
+    .c-muted { color: #6e89a3; }
+    .c-coral { color: #ef887e; }
+
+    .risk-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .risk {
+      padding: 18px;
+      border: 1px solid #f1c3bd;
+      border-radius: 15px;
+      background: var(--coral-soft);
+    }
+    .risk b { color: #9d3d35; }
+    .risk p { margin: 7px 0 0; color: #744e52; font-size: 13px; }
+    .note {
+      padding: 18px;
+      border: 1px solid #c7bbed;
+      border-radius: 15px;
+      background: var(--violet-soft);
+    }
+    .note b { color: #554099; }
+    .note p { margin: 7px 0 0; color: #63577f; font-size: 13px; }
+
+    footer { padding: 28px 20px 44px; border-top: 1px solid var(--line); color: var(--muted); text-align: center; font-size: 12px; }
+
+    .reveal { opacity: 0; transform: translateY(14px); transition: opacity .55s ease, transform .55s ease; }
+    .reveal.visible { opacity: 1; transform: none; }
+    :focus-visible { outline: 3px solid rgba(25,169,162,.45); outline-offset: 3px; }
+
+    @media (max-width: 980px) {
+      .hero-inner { grid-template-columns: 1fr; }
+      .signal-board { max-width: 650px; }
+      .shell { grid-template-columns: 1fr; }
+      .toc { display: none; }
+      .scope-grid { grid-template-columns: repeat(2, 1fr); }
+      .map { grid-template-columns: 1fr; gap: 12px; }
+      .arrow { transform: rotate(90deg); min-height: 44px; }
+      .function-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 680px) {
+      body { overflow-x: hidden; }
+      .hero { min-height: auto; }
+      .hero-inner { width: min(100% - 28px, 1180px); padding: 56px 0; gap: 38px; }
+      h1 { font-size: 50px; }
+      .signal-board { padding: 16px; }
+      .hero-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .hero-meta span { text-align: center; }
+      .signal-step { grid-template-columns: 44px 1fr; }
+      .signal-step em { display: none; }
+      .trace { left: 46px; }
+      .signal-step b { margin-left: 18px; }
+      .shell { width: min(100% - 24px, 1240px); }
+      main { padding-top: 52px; }
+      section { margin-bottom: 68px; }
+      .scope-grid, .risk-grid, .example { grid-template-columns: 1fr; }
+      .journey-panel.active { display: block; }
+      .flow summary { grid-template-columns: 40px 1fr auto; padding: 16px; gap: 10px; }
+      .flow-body { padding: 0 16px 20px; }
+      .catalog-tools { grid-template-columns: 1fr; }
+      .filters { overflow-x: auto; }
+      .filter { flex: 0 0 auto; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
+      .reveal { opacity: 1; transform: none; }
+    }
+    @media print {
+      .hero { min-height: auto; }
+      .hero-inner { grid-template-columns: 1fr; padding: 34px 0; }
+      .signal-board, .toc, .catalog-tools { display: none; }
+      .shell { display: block; width: 100%; }
+      main { padding: 28px; }
+      section { break-inside: avoid; margin-bottom: 45px; }
+      details.flow > * { display: block !important; }
+      .function-card { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到正文</a>
+
+  <header class="hero">
+    <div class="hero-inner">
+      <div>
+        <p class="eyebrow">Source trace / v24.6</p>
+        <h1>一枚 <span>SN</span><br>如何变成影片</h1>
+        <p class="hero-lead">aniGamerPlus 核心模块调用图谱。剥离 CLI 参数解析与 Dashboard 路由，只追踪配置、番剧解析、播放授权、媒体下载、弹幕、FTP 与任务状态。</p>
+        <div class="hero-meta">
+          <span>源码提交 c6dce4a</span>
+          <span>分析日期 2026-07-10</span>
+          <span>Python / requests / ffmpeg</span>
+          <span>静态源码审阅</span>
+        </div>
+      </div>
+      <div class="signal-board" aria-label="核心处理信号链">
+        <div class="board-top"><span>live signal trace</span><span class="leds"><i></i><i></i><i></i></span></div>
+        <div class="trace"></div>
+        <div class="signal-step"><b></b><div><strong>读取契约</strong><small>config · cookie · sn_list</small></div><em>Config.py</em></div>
+        <div class="signal-step"><b></b><div><strong>识别番剧</strong><small>title · episode · episode_list</small></div><em>Anime.__init__</em></div>
+        <div class="signal-step"><b></b><div><strong>取得播放权</strong><small>device · token · ad · playlist</small></div><em>__get_m3u8_dict</em></div>
+        <div class="signal-step"><b></b><div><strong>落盘成片</strong><small>segments / ffmpeg · rename</small></div><em>download</em></div>
+        <div class="signal-step"><b></b><div><strong>生成附属物</strong><small>ASS · FTP · notifications</small></div><em>post-process</em></div>
+        <div class="signal-step"><b></b><div><strong>回写状态</strong><small>resolution · size · local path</small></div><em>SQLite</em></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="shell">
+    <nav class="toc" aria-label="报告目录">
+      <p>TRACE INDEX</p>
+      <a href="#scope">范围与结论</a>
+      <a href="#architecture">模块边界</a>
+      <a href="#journey">SN 生命周期</a>
+      <a href="#chains">调用链详解</a>
+      <a href="#catalog">函数契约表</a>
+      <a href="#example">贯穿示例</a>
+      <a href="#risks">关键观察</a>
+    </nav>
+
+    <main id="main">
+      <section id="scope" class="reveal">
+        <p class="section-kicker">Scope</p>
+        <h2>四个核心模块，一层任务编排</h2>
+        <p class="section-intro">真正的业务能力集中在四个文件；入口文件只抽取调度、队列和数据库状态机。函数“返回”不总是 Python 的 <code>return</code>：大量结果写入 <code>Anime</code> 实例字段或全局进度表。</p>
+        <div class="scope-grid">
+          <article class="scope-card"><span class="mark">A</span><h3>Anime</h3><p>从页面/API 元数据一路推进到 m3u8、下载、通知与 FTP，是主业务聚合对象。</p></article>
+          <article class="scope-card"><span class="mark">C</span><h3>Config</h3><p>配置正规化、版本迁移、订阅清单、Cookie 生命周期和共享任务进度。</p></article>
+          <article class="scope-card"><span class="mark">D</span><h3>Danmu</h3><p>拉取弹幕与在线屏蔽词，将位置、颜色和时间换算为 ASS Dialogue。</p></article>
+          <article class="scope-card"><span class="mark">L</span><h3>ColorPrint</h3><p>统一控制台颜色与按日落盘日志，被所有业务路径作为横切能力调用。</p></article>
+        </div>
+        <div class="boundary"><strong>报告边界：</strong>不展开 <code>argparse → __cui()</code> 的命令行选项分发，也不展开 <code>Dashboard/Server.py</code> 的 HTTP/WebSocket 路由；但保留它们共同依赖的 <code>build_anime / check_tasks / worker / SQLite</code> 核心编排契约。</div>
+      </section>
+
+      <section id="architecture" class="reveal">
+        <p class="section-kicker">Architecture</p>
+        <h2>表面很薄，状态很深</h2>
+        <p class="section-intro">CLI 和 Web 都把任务转换为 SN；之后进入同一套有状态对象。数据库与文件系统不是外围细节，而是决定重试、上传和“是否已完成”的事实来源。</p>
+        <div class="map" role="img" aria-label="从入口表面到核心模块再到外部系统的架构图">
+          <div class="map-col">
+            <div class="map-label">表面（不展开）</div>
+            <article class="module surface"><code>argparse / __cui</code><p>单集、最新、全部、范围、清单模式。</p></article>
+            <article class="module surface"><code>Dashboard.Server</code><p>配置、手动任务、进度 WebSocket。</p></article>
+          </div>
+          <div class="arrow">→</div>
+          <div class="map-col">
+            <div class="map-label">核心业务</div>
+            <article class="module primary"><code>build_anime → Anime</code><p>创建一集的状态容器，初始化网络身份并抓取元数据。</p></article>
+            <article class="module"><code>check_tasks → worker</code><p>订阅决策、数据库判重、下载/上传信号量与冷却。</p></article>
+            <article class="module"><code>Config · Danmu · ColorPrint</code><p>配置与 Cookie、ASS 生成、统一日志。</p></article>
+          </div>
+          <div class="arrow">→</div>
+          <div class="map-col">
+            <div class="map-label">I/O 边界</div>
+            <article class="module"><code>Bahamut APIs</code><p>页面、device、token、playlist、弹幕。</p></article>
+            <article class="module"><code>ffmpeg · filesystem</code><p>AES-128 合并、封装、目录归类。</p></article>
+            <article class="module"><code>SQLite · FTP · notify</code><p>持久状态、远程归档、消息推送。</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section id="journey" class="reveal">
+        <p class="section-kicker">Lifecycle</p>
+        <h2>点击观察一枚 SN 的状态变化</h2>
+        <p class="section-intro">每站都列出真正的入参、产物与隐藏状态；这比只看函数名更接近该项目的运行契约。</p>
+        <div class="journey">
+          <div class="journey-tabs" role="tablist" aria-label="SN 生命周期阶段">
+            <button class="journey-tab active" role="tab" aria-selected="true" data-panel="j1"><span>STAGE 01</span>配置装载</button>
+            <button class="journey-tab" role="tab" aria-selected="false" data-panel="j2"><span>STAGE 02</span>元数据</button>
+            <button class="journey-tab" role="tab" aria-selected="false" data-panel="j3"><span>STAGE 03</span>播放授权</button>
+            <button class="journey-tab" role="tab" aria-selected="false" data-panel="j4"><span>STAGE 04</span>媒体落盘</button>
+            <button class="journey-tab" role="tab" aria-selected="false" data-panel="j5"><span>STAGE 05</span>后处理</button>
+            <button class="journey-tab" role="tab" aria-selected="false" data-panel="j6"><span>STAGE 06</span>状态回写</button>
+          </div>
+          <article id="j1" class="journey-panel active" role="tabpanel">
+            <div class="journey-copy"><span class="pill">Config boundary</span><h3>把磁盘文本变成可运行契约</h3><p><code>read_settings()</code> 会创建/升级配置、强制类型、补默认路径、限制并发，并推导 <code>use_gost</code>。Cookie 另有进程级缓存。</p></div>
+            <div class="io"><div class="io-row"><b>IN</b><code>config='' 或 dict；config.json / cookie.txt</code></div><div class="io-row"><b>OUT</b><code>settings: dict；cookies: dict | None</code></div><div class="io-row"><b>STATE</b><code>Config.cookie、working_dir、tasks_progress_rate</code></div><div class="chain"><strong>链</strong> read_settings → __read_settings_file → [迁移/正规化] → read_cookie</div></div>
+          </article>
+          <article id="j2" class="journey-panel" role="tabpanel">
+            <div class="journey-copy"><span class="pill">Anime identity</span><h3>让 SN 拥有标题、集数和全集映射</h3><p>构造器按 Web 或移动 API 抓取源数据，然后依次派生标题、番名、当前集数和 <code>{episode: sn}</code>。</p></div>
+            <div class="io"><div class="io-row"><b>IN</b><code>sn: int | str；debug_mode=False；gost_port=34173</code></div><div class="io-row"><b>OUT</b><code>Anime 实例（构造器自身返回 None）</code></div><div class="io-row"><b>STATE</b><code>_title, _bangumi_name, _episode, _episode_list</code></div><div class="chain"><strong>链</strong> Anime.__init__ → __init_header → __get_src → __get_title → __get_episode → __get_bangumi_name → __get_episode_list</div></div>
+          </article>
+          <article id="j3" class="journey-panel" role="tabpanel">
+            <div class="journey-copy"><span class="pill">Playback handshake</span><h3>模拟一次合法播放会话</h3><p>获取 device ID 与 token；非 VIP 触发广告开始/等待/结束，随后拉 master playlist 并解析每档分辨率。</p></div>
+            <div class="io"><div class="io-row"><b>IN</b><code>实例 SN、Cookie、Web/App header、ads_time</code></div><div class="io-row"><b>OUT</b><code>{"360": chunklist_url, ..., "1080": chunklist_url}</code></div><div class="io-row"><b>EXIT</b><code>地区限制、token error、only_use_vip 时可能 sys.exit(1)</code></div><div class="chain"><strong>链</strong> get_device_id → gain_access → ad/unlock → get_playlist → parse_playlist</div></div>
+          </article>
+          <article id="j4" class="journey-panel" role="tabpanel">
+            <div class="journey-copy"><span class="pill">Two download engines</span><h3>分段并发，或交给 ffmpeg 直拉</h3><p><code>segment_download_mode</code> 决定分支；前者自己下载 TS 和 key 再合并，后者用 ffmpeg 直接消费远端 m3u8。</p></div>
+            <div class="io"><div class="io-row"><b>IN</b><code>resolution, save_dir, bangumi_tag, rename, classify</code></div><div class="io-row"><b>OUT</b><code>显式 None；语义结果写入 video_size / local_video_path / video_resolution</code></div><div class="io-row"><b>STATE</b><code>tasks_progress_rate[sn] 与临时/最终文件</code></div><div class="chain"><strong>链</strong> download → __get_m3u8_dict → resolution fallback → __segment_download_mode | __ffmpeg_download_mode</div></div>
+          </article>
+          <article id="j5" class="journey-panel" role="tabpanel">
+            <div class="journey-copy"><span class="pill">Artifacts & delivery</span><h3>视频之外还有 ASS、FTP 与消息</h3><p>弹幕可写同名 ASS；通知支持 CQ、Telegram、Discord、Plex；FTP 具备 Pure-FTPd 临时名识别和断点续传。</p></div>
+            <div class="io"><div class="io-row"><b>IN</b><code>_danmu 开关、ban words、FTP/通知配置</code></div><div class="io-row"><b>OUT</b><code>.ass 文件；upload() → bool；通知仅副作用</code></div><div class="io-row"><b>STATE</b><code>upload_succeed_flag、远端文件、日志</code></div><div class="chain"><strong>链</strong> download → Danmu.download / notify；worker → Anime.upload</div></div>
+          </article>
+          <article id="j6" class="journey-panel" role="tabpanel">
+            <div class="journey-copy"><span class="pill">Task state</span><h3>用文件大小判定下载成功</h3><p><code>update_db()</code> 将 <code>video_size &gt; 5 MB</code> 视为成功，并记录分辨率、本地路径和 FTP 状态，供下一轮只下载或只上传。</p></div>
+            <div class="io"><div class="io-row"><b>IN</b><code>Anime 实例的公开状态字段</code></div><div class="io-row"><b>OUT</b><code>显式 None；SQLite anime 行被 UPDATE</code></div><div class="io-row"><b>STATE</b><code>status, remote_status, resolution, file_size, local_file_path</code></div><div class="chain"><strong>链</strong> worker → update_db → 下一轮 check_tasks/read_db</div></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="chains" class="reveal">
+        <p class="section-kicker">Call chains</p>
+        <h2>八条真实业务调用链</h2>
+        <p class="section-intro">展开任意链查看分支条件与数据落点。箭头表示直接调用；方括号表示条件分支或外部 I/O。</p>
+        <div class="flow-list">
+          <details class="flow" open><summary><span class="flow-no">01</span><span><h3>配置启动链</h3><small>从不可信 JSON 到带运行时字段的 settings</small></span></summary><div class="flow-body"><div class="callline"><code>Config.read_settings(config='')</code><i>→</i><code>__read_settings_file()</code><i>→</i><code>[__update_database]</code><i>→</i><code>[__update_settings]</code><i>→</i><code>__remove_superfluous_logs()</code></div><ul><li>补充 <code>working_dir / aniGamerPlus_version / use_gost</code> 三个运行时键；<code>write_settings()</code> 落盘前再删除。</li><li>正规化端口、并发、路径、封装格式和下载模式；可能改写配置或创建默认配置。</li></ul></div></details>
+          <details class="flow"><summary><span class="flow-no">02</span><span><h3>番剧识别链</h3><small>一个 SN 派生出整个剧集映射</small></span></summary><div class="flow-body"><div class="callline"><code>build_anime(sn)</code><i>→</i><code>Anime(sn)</code><i>→</i><code>__get_src()</code><i>→</i><code>__get_title()</code><i>→</i><code>__get_episode()</code><i>→</i><code>__get_bangumi_name()</code><i>→</i><code>__get_episode_list()</code></div><ul><li>Web 源为 BeautifulSoup；移动源为 JSON dict。无动画时直接 <code>sys.exit(1)</code>。</li><li>剧集映射统一为 <code>dict[str, int]</code>，兼容电影、特别篇、中文配音与单集页面。</li></ul></div></details>
+          <details class="flow"><summary><span class="flow-no">03</span><span><h3>播放授权链</h3><small>device、token、广告、master playlist</small></span></summary><div class="flow-body"><div class="callline"><code>get_m3u8_dict()</code><i>→</i><code>__get_m3u8_dict()</code><i>→</i><code>get_device_id()</code><i>→</i><code>gain_access()</code><i>→</i><code>[unlock/check_lock/ad]</code><i>→</i><code>get_playlist()</code><i>→</i><code>parse_playlist()</code></div><ul><li>所有 HTTP 基本都穿过 <code>__request()</code>，所以重试、Cookie 刷新、代理与日志逻辑集中在这里。</li><li>输出缓存进 <code>_m3u8_dict</code>；第二次读取不会重新握手，除非实例重建。</li></ul></div></details>
+          <details class="flow"><summary><span class="flow-no">04</span><span><h3>分段下载链</h3><small>自己拉 TS，再调用 ffmpeg 合并</small></span></summary><div class="flow-body"><div class="callline"><code>download(...)</code><i>→</i><code>__segment_download_mode(resolution)</code><i>→</i><code>download_chunk(uri) × N</code><i>→</i><code>[localize m3u8]</code><i>→</i><code>ffmpeg -c copy</code><i>→</i><code>move/copy</code></div><ul><li>每个 chunk 经 <code>__request(max_retry=segment_max_retry)</code>；Semaphore 限制单视频的分段并发。</li><li>进度写入 <code>Config.tasks_progress_rate[sn]['rate']</code>；完成后设置路径、文件名和 MB 大小。</li></ul></div></details>
+          <details class="flow"><summary><span class="flow-no">05</span><span><h3>ffmpeg 直拉链</h3><small>远端 m3u8 直接交给子进程</small></span></summary><div class="flow-body"><div class="callline"><code>download(...)</code><i>→</i><code>__ffmpeg_download_mode(resolution)</code><i>→</i><code>Popen(ffmpeg)</code><i>+</i><code>check_ffmpeg_alive()</code><i>→</i><code>move/copy</code></div><ul><li>守护线程每分钟检查临时文件是否至少增长 3 MiB；否则 kill ffmpeg。</li><li>成功条件为 returncode=0 且 stderr 不含 <code>Failed to open segment</code>。</li></ul></div></details>
+          <details class="flow"><summary><span class="flow-no">06</span><span><h3>弹幕生成链</h3><small>JSON 弹幕变成可随片播放的 ASS</small></span></summary><div class="flow-body"><div class="callline"><code>Anime.download()</code><i>→</i><code>Danmu(sn, ass_path, cookies)</code><i>→</i><code>download(ban_words)</code><i>→</i><code>get_BGRcolor / find_ban_word</code><i>→</i><code>[write ASS]</code></div><ul><li>本地屏蔽词列表会被在线屏蔽词原地追加；滚动弹幕按可用轨道和随机 10–14 秒速度排布。</li><li>方法显式返回 <code>None</code>；成功与否通过文件和日志观察。</li></ul></div></details>
+          <details class="flow"><summary><span class="flow-no">07</span><span><h3>FTP 断点续传链</h3><small>识别 Pure-FTPd 临时文件并校验字节数</small></span></summary><div class="flow-body"><div class="callline"><code>worker()</code><i>→</i><code>Anime.upload(tag)</code><i>→</i><code>connect_ftp()</code><i>→</i><code>transfercmd(STOR, offset)</code><i>→</i><code>[size verify]</code><i>→</i><code>rename()</code></div><ul><li>输入依赖实例先拥有 <code>local_video_path</code>；也可用 <code>debug_file</code> 覆盖。</li><li>最终返回 <code>bool</code> 并同步设置 <code>upload_succeed_flag</code>。</li></ul></div></details>
+          <details class="flow"><summary><span class="flow-no">08</span><span><h3>订阅与状态机链</h3><small>清单 → 判重 → 下载 → 可选上传 → 回写</small></span></summary><div class="flow-body"><div class="callline"><code>Config.read_sn_list()</code><i>→</i><code>check_tasks()</code><i>→</i><code>read_db / insert_db</code><i>→</i><code>queue</code><i>→</i><code>worker()</code><i>→</i><code>Anime.download()</code><i>→</i><code>[upload]</code><i>→</i><code>update_db()</code></div><ul><li><code>all / latest / largest-sn / single</code> 只影响挑选哪些 episode SN，后续 worker 完全相同。</li><li>下载与上传分别由 Semaphore 限流；下载槽位要等冷却计时结束才释放。</li></ul></div></details>
+        </div>
+      </section>
+
+      <section id="catalog" class="reveal">
+        <p class="section-kicker">Function contracts</p>
+        <h2>函数级入参 / 出参目录</h2>
+        <p class="section-intro">覆盖四个核心模块与入口文件中的非 UI 编排函数。可按模块筛选或搜索函数名、参数、调用关系。私有方法以源码中的双下划线标记。</p>
+        <div class="catalog-tools">
+          <label class="search-wrap"><span hidden>搜索函数</span><input id="functionSearch" type="search" placeholder="搜索函数、参数、返回值或调用者…"></label>
+          <div class="filters" aria-label="模块筛选">
+            <button class="filter active" data-filter="all">全部</button>
+            <button class="filter" data-filter="anime">Anime</button>
+            <button class="filter" data-filter="config">Config</button>
+            <button class="filter" data-filter="danmu">Danmu</button>
+            <button class="filter" data-filter="log">Log</button>
+            <button class="filter" data-filter="orchestration">编排</button>
+          </div>
+        </div>
+
+        <div class="module-group" data-module="anime">
+          <div class="module-head"><h3>Anime.py</h3><p>主业务聚合对象 · L26–1370</p></div>
+          <div class="function-grid">
+            <article class="function-card"><div class="fn-top"><code class="fn-name">Anime(sn, debug_mode=False, gost_port=34173)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">装载配置/Cookie/会话并抓取番剧元数据。</p><div class="contract"><div><b>入参</b><code>sn: int|str；debug_mode: bool；gost_port: int</code></div><div><b>出参</b><code>Anime 实例；__init__ 显式 None</code></div><div><b>状态</b><code>初始化全部 _字段；失败可能 sys.exit / TryTooManyTimeError</code></div><div><b>调用</b><code>Config.read_* → __init_proxy/header/src/title/name/episode/list</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">renew()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">失败重试前重新抓取并覆盖元数据。</p><div class="contract"><div><b>入参</b><code>无</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>刷新 _src/_title/_bangumi_name/_episode/_episode_list</code></div><div><b>调用</b><code>__get_src → __get_title → __get_bangumi_name → __get_episode → __get_episode_list</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">get_sn()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">读取当前影片识别码。</p><div class="contract"><div><b>入参</b><code>无</code></div><div><b>出参</b><code>原样返回 _sn（int|str）</code></div><div><b>调用者</b><code>DB insert/update、任务比较</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">get_title()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">读取含集数标签的完整标题。</p><div class="contract"><div><b>入参</b><code>无</code></div><div><b>出参</b><code>str _title</code></div><div><b>调用者</b><code>日志、DB、文件名、通知</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">get_bangumi_name()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">惰性返回去掉当前集标签的番剧名。</p><div class="contract"><div><b>入参</b><code>无</code></div><div><b>出参</b><code>str</code></div><div><b>状态</b><code>空值时调用 __get_bangumi_name()</code></div><div><b>调用者</b><code>分类目录、DB、任务日志</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">get_episode()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">惰性返回剧集标识，允许数字、小数、SP、电影。</p><div class="contract"><div><b>入参</b><code>无</code></div><div><b>出参</b><code>str</code></div><div><b>状态</b><code>空值时调用 __get_episode()</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">get_episode_list()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">惰性读取整部番的“集标识 → SN”映射。</p><div class="contract"><div><b>入参</b><code>无</code></div><div><b>出参</b><code>dict[str, int]</code></div><div><b>状态</b><code>空字典时调用 __get_episode_list()</code></div><div><b>调用者</b><code>check_tasks、批量/范围选择</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">get_filename()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">按最终或配置分辨率生成合法成片文件名。</p><div class="contract"><div><b>入参</b><code>无</code></div><div><b>出参</b><code>str 文件名（含扩展名）</code></div><div><b>规则</b><code>video_resolution==0 时用 settings.download_resolution</code></div><div><b>调用</b><code>__get_filename()</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">get_m3u8_dict()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">惰性取得可用分辨率与 chunklist URL。</p><div class="contract"><div><b>入参</b><code>无</code></div><div><b>出参</b><code>dict[str, str]</code></div><div><b>状态</b><code>缓存至 _m3u8_dict</code></div><div><b>调用</b><code>__get_m3u8_dict()</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">get_season_num(zh_num)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">将零至十组成的中文季数转成整数。</p><div class="contract"><div><b>入参</b><code>zh_num: str，如 "十二"</code></div><div><b>出参</b><code>int，如 12</code></div><div><b>调用者</b><code>PLEX 命名、季度目录分类</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">download(resolution='', save_dir='', bangumi_tag='', realtime_show_file_size=False, rename='', classify=True)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">完整下载事务：解析、选清晰度、建目录、下载、弹幕、通知与 Plex。</p><div class="contract"><div><b>入参</b><code>resolution/save_dir/tag/rename: str；realtime/classify: bool</code></div><div><b>出参</b><code>None；失败多数也返回 None</code></div><div><b>状态</b><code>video_resolution/video_size/local_video_path/_video_filename；tasks_progress_rate</code></div><div><b>调用</b><code>__get_m3u8_dict → filename → segment|ffmpeg → [Danmu/notify/Plex]</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">upload(bangumi_tag='', debug_file='')</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">FTP/FTPS 断点续传并进行远端字节校验。</p><div class="contract"><div><b>入参</b><code>bangumi_tag: str；debug_file: str 可覆盖本地路径</code></div><div><b>出参</b><code>bool upload_succeed_flag</code></div><div><b>状态</b><code>远端目录/临时文件；upload_succeed_flag</code></div><div><b>调用</b><code>connect_ftp / remove_dir / del_all_files / exit_ftp</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">get_info()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">打印标题、番名、集数、参考文件名与分辨率。</p><div class="contract"><div><b>入参</b><code>无</code></div><div><b>出参</b><code>None（日志/控制台副作用）</code></div><div><b>调用</b><code>get_title/name/episode/filename/m3u8_dict → err_print</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">enable_danmu() / set_resolution(resolution)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">两个轻量状态修改器：启用弹幕；指定参考分辨率。</p><div class="contract"><div><b>入参</b><code>无；resolution: int|numeric str</code></div><div><b>出参</b><code>均为 None</code></div><div><b>状态</b><code>_danmu=True；video_resolution=int(resolution)</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">__init_proxy() / __init_header()</code><span class="visibility">PRIVATE</span></div><p class="fn-summary">构造代理环境变量和 Web/App 请求头。</p><div class="contract"><div><b>入参</b><code>实例 settings / gost_port / sn</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>HTTP_PROXY/HTTPS_PROXY/NO_PROXY；_proxies/_mobile_header/_web_header/_req_header</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">__get_src() / __get_title() / __get_bangumi_name() / __get_episode() / __get_episode_list()</code><span class="visibility">PRIVATE</span></div><p class="fn-summary">Web/App 双实现的元数据抽取流水线。</p><div class="contract"><div><b>入参</b><code>实例 sn、settings.use_mobile_api、_src/_title</code></div><div><b>出参</b><code>均为 None</code></div><div><b>状态</b><code>依次填充 _src/title/bangumi_name/episode/episode_list</code></div><div><b>异常</b><code>无动画时 err_print + sys.exit(1)</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">__request(req, no_cookies=False, show_fail=True, max_retry=3, addition_header=None, use_pyhttpx=False)</code><span class="visibility">PRIVATE</span></div><p class="fn-summary">统一 GET、重试、代理与 Cookie 刷新中枢。</p><div class="contract"><div><b>入参</b><code>req: URL；4 个控制参数；addition_header: dict|None</code></div><div><b>出参</b><code>requests.Response 或 pyhttpx response</code></div><div><b>状态</b><code>可能刷新 _cookies、cookie.txt、_req_header</code></div><div><b>异常</b><code>超过次数抛 TryTooManyTimeError（继承 BaseException）</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">__request_json(...同 __request)</code><span class="visibility">PRIVATE</span></div><p class="fn-summary">把统一 GET 的响应解码为 JSON。</p><div class="contract"><div><b>入参</b><code>与 __request 完全相同</code></div><div><b>出参</b><code>dict | list（取决于接口）</code></div><div><b>差异</b><code>pyhttpx 使用 .json 属性；requests 使用 .json()</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">__get_m3u8_dict()</code><span class="visibility">PRIVATE</span></div><p class="fn-summary">完成 device/token/广告/playlist 协议并解析清晰度。</p><div class="contract"><div><b>入参</b><code>实例 SN、Cookie、headers、VIP/广告配置</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>_device_id/_playlist/_m3u8_dict；可能更新 ads_time</code></div><div><b>内部</b><code>get_device_id/gain_access/unlock/check_lock/start_ad/skip_ad/video_start/check_no_ad/get_playlist/parse_playlist</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">__get_filename(resolution, without_suffix=False)</code><span class="visibility">PRIVATE</span></div><p class="fn-summary">实现补零、PLEX 季集号、前后缀、分辨率和扩展名规则。</p><div class="contract"><div><b>入参</b><code>resolution: str；without_suffix: bool</code></div><div><b>出参</b><code>str；without_suffix=True 时不含用户后缀/扩展名</code></div><div><b>调用</b><code>get_season_num → Config.legalize_filename</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">__get_temp_filename(resolution, temp_suffix)</code><span class="visibility">PRIVATE</span></div><p class="fn-summary">生成 DOWNLOADING/MERGING 临时文件名。</p><div class="contract"><div><b>入参</b><code>resolution: str；temp_suffix: str</code></div><div><b>出参</b><code>合法化后的 str</code></div><div><b>调用</b><code>__get_filename(without_suffix=True) → legalize_filename</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">__segment_download_mode(resolution='')</code><span class="visibility">PRIVATE</span></div><p class="fn-summary">并发下载 AES-128 key/TS，重写本地 m3u8 后合并。</p><div class="contract"><div><b>入参</b><code>resolution: str，必须存在于 _m3u8_dict</code></div><div><b>出参</b><code>None；失败分支提前 return</code></div><div><b>状态</b><code>进度率、临时目录、video_size/local_video_path/_video_filename</code></div><div><b>内部</b><code>download_chunk(uri): None，线程副作用</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">__ffmpeg_download_mode(resolution='')</code><span class="visibility">PRIVATE</span></div><p class="fn-summary">ffmpeg 直拉并由守护线程检测停滞。</p><div class="contract"><div><b>入参</b><code>resolution: str，必须存在于 _m3u8_dict</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>临时文件、video_size/local_video_path/_video_filename</code></div><div><b>内部</b><code>check_ffmpeg_alive(): None；可能 kill 子进程</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">upload 内部：connect_ftp(show_err=True)</code><span class="visibility">NESTED</span></div><p class="fn-summary">连接、登录、进入/创建标签与番剧临时目录。</p><div class="contract"><div><b>入参</b><code>show_err: bool；闭包 ftp/settings/tag/tmp_dir</code></div><div><b>出参</b><code>bool connect_flag</code></div><div><b>状态</b><code>ftp 当前目录；first_connect=False</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">upload 内部：exit_ftp / remove_dir / del_all_files</code><span class="visibility">NESTED</span></div><p class="fn-summary">关闭连接及递归清理当前层的远端临时文件。</p><div class="contract"><div><b>入参</b><code>show_err: bool；dir_name: str；或无</code></div><div><b>出参</b><code>均为 None</code></div><div><b>状态</b><code>关闭 ftp；删除远端目录/文件</code></div></div></article>
+          </div>
+        </div>
+
+        <div class="module-group" data-module="config">
+          <div class="module-head"><h3>Config.py</h3><p>配置、清单、Cookie、迁移 · L35–862</p></div>
+          <div class="function-grid">
+            <article class="function-card"><div class="fn-top"><code class="fn-name">get_max_multi_thread() / get_working_dir() / get_config_path()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">读取三个模块级常量。</p><div class="contract"><div><b>入参</b><code>无</code></div><div><b>出参</b><code>int max_multi_thread；str working_dir；str config_path</code></div><div><b>副作用</b><code>无</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">legalize_filename(filename)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">把九类跨平台非法字符替换为全角字符。</p><div class="contract"><div><b>入参</b><code>filename: str</code></div><div><b>出参</b><code>str legal_filename</code></div><div><b>调用者</b><code>Anime 文件名/目录、FTP、弹幕路径</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">get_sn_list_content()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">读取 sn_list.txt 原文，保留注释供编辑器使用。</p><div class="contract"><div><b>入参</b><code>无</code></div><div><b>出参</b><code>str；文件不存在返回 ""</code></div><div><b>副作用</b><code>文件读取</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">read_settings(config='')</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">配置系统总入口：创建、迁移、校验、限流并补运行时值。</p><div class="contract"><div><b>入参</b><code>config: '' | dict；dict 用于校验待写配置</code></div><div><b>出参</b><code>dict settings（包含 working_dir/version/use_gost）</code></div><div><b>状态</b><code>可能创建/升级 config 和 DB、删日志、禁用缺失 Dashboard</code></div><div><b>调用</b><code>__init/read/update/remove → write_settings</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">write_settings(web_config)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">先正规化配置，再剥离运行时键并 JSON 落盘。</p><div class="contract"><div><b>入参</b><code>web_config: dict</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>覆盖 config.json；默认目录写回空字符串</code></div><div><b>调用</b><code>read_settings(web_config) → json.dump</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">read_sn_list()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">解析订阅清单、标签、下载模式与重命名。</p><div class="contract"><div><b>入参</b><code>无；读取 sn_list.txt</code></div><div><b>出参</b><code>dict[int, {'mode': str, 'tag': str, 'rename': str}]；空/缺失返回 {}</code></div><div><b>状态</b><code>可能纠正 .txt.txt 文件名与编码</code></div><div><b>调用</b><code>read_settings → check_encoding</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">write_sn_list(sn_list_content)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">覆盖保存订阅清单原文。</p><div class="contract"><div><b>入参</b><code>sn_list_content: str</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>覆盖 sn_list.txt</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">check_encoding(file_path)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">检测文件编码并把非 UTF-8/ASCII 原地转为 UTF-8。</p><div class="contract"><div><b>入参</b><code>file_path: str|path-like</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>可能覆盖原文件；打印转换日志</code></div><div><b>调用</b><code>chardet.detect → decode/encode</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">del_bom(path, display=True)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">检测并移除 UTF-8 BOM，保存失败最多重试四次后抛错。</p><div class="contract"><div><b>入参</b><code>path: str；display: bool</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>可能覆盖文件；随机等待重试</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">test_cookie()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">仅用于触发一次带日志的 Cookie 读取。</p><div class="contract"><div><b>入参</b><code>无</code></div><div><b>出参</b><code>None（丢弃 read_cookie 返回值）</code></div><div><b>调用</b><code>read_cookie(log=True)</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">read_cookie(log=False)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">读取分号分隔 Cookie，并使用模块级缓存。</p><div class="contract"><div><b>入参</b><code>log: bool</code></div><div><b>出参</b><code>dict | None；空文件直接 None，缺失通常 {}</code></div><div><b>状态</b><code>设置 Config.cookie；可能改名旧文件/错误双扩展文件</code></div><div><b>细节</b><code>中文值 quote；移除 ckBH_lastBoard</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">invalid_cookie()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">清空缓存并将 cookie.txt 标记为 invalid_cookie.txt。</p><div class="contract"><div><b>入参</b><code>无</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>cookie=None；删除旧 invalid 文件并重命名</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">renew_cookies(new_cookie, log=True)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">把键值 Cookie 序列化成单行并覆盖保存。</p><div class="contract"><div><b>入参</b><code>new_cookie: Mapping[str,str]；log: bool</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>cookie=None；覆盖 cookie.txt；失败随机退避</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">time_stamp_to_time(timestamp) / get_cookie_time()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">格式化时间戳；读取 cookie 文件最后修改时间。</p><div class="contract"><div><b>入参</b><code>timestamp: int|float；或无</code></div><div><b>出参</b><code>'YYYY-MM-DD HH:MM:SS'</code></div><div><b>异常</b><code>cookie 不存在时 getmtime 抛 FileNotFoundError</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">read_latest_version_on_github()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">读取 GitHub latest release；失败回退当前版本。</p><div class="contract"><div><b>入参</b><code>无</code></div><div><b>出参</b><code>{'tag_name': str, 'body': str}</code></div><div><b>状态</b><code>网络 GET timeout=3；写日志</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">get_local_ip()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">通过 UDP 路由探测本机出口 IP。</p><div class="contract"><div><b>入参</b><code>无</code></div><div><b>出参</b><code>预期 str local_ip</code></div><div><b>风险</b><code>异常分支调用未定义 local_ip.close()，随后返回也可能 UnboundLocalError</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">parse_proxy(proxy_str: str) → dict</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">拆分协议、主机、端口与可选认证。</p><div class="contract"><div><b>入参</b><code>proxy_str，如 http://user:pass@host:8080</code></div><div><b>出参</b><code>{proxy_user, proxy_passwd, proxy_protocol, proxy_ip, proxy_port}；空白返回 {}</code></div><div><b>异常</b><code>非预期格式可能因 re.findall()[0] 抛 IndexError</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">__color_print(sn, err_msg, detail='', status=0, no_sn=False, display=True)</code><span class="visibility">PRIVATE</span></div><p class="fn-summary">延迟导入 ColorPrint，规避模块循环依赖。</p><div class="contract"><div><b>入参</b><code>日志字段</code></div><div><b>出参</b><code>None</code></div><div><b>调用</b><code>err_print；UnboundLocalError 时才 import</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">__init_settings()</code><span class="visibility">PRIVATE</span></div><p class="fn-summary">删除旧配置并写入 v17.2 全量默认值。</p><div class="contract"><div><b>入参</b><code>无</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>覆盖 config.json</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">__update_settings(old_settings)</code><span class="visibility">PRIVATE</span></div><p class="fn-summary">逐版本补键、迁移旧结构并提升 config_version。</p><div class="contract"><div><b>入参</b><code>old_settings: dict，必须至少含旧版核心键</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>覆盖 config.json；保留原有有效配置</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">__update_database(old_version)</code><span class="visibility">PRIVATE</span></div><p class="fn-summary">创建 anime 表、补 local_file_path、把旧 ns 列迁移为 sn。</p><div class="contract"><div><b>入参</b><code>old_version: number（仅用于日志）</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>迁移 aniGamer.db schema；事务 commit</code></div><div><b>内部</b><code>creat_table(): None</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">__read_settings_file()</code><span class="visibility">PRIVATE</span></div><p class="fn-summary">读取 JSON；编码/解析失败时修复或重置。</p><div class="contract"><div><b>入参</b><code>无；读取 config_path</code></div><div><b>出参</b><code>dict</code></div><div><b>状态</b><code>可能 check_encoding 或 __init_settings 覆盖配置</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">__remove_superfluous_logs(max_num)</code><span class="visibility">PRIVATE</span></div><p class="fn-summary">保留指定数量的非 web 日志。</p><div class="contract"><div><b>入参</b><code>max_num: int</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>按文件名字典序删除最旧日志</code></div></div></article>
+          </div>
+        </div>
+
+        <div class="module-group" data-module="danmu">
+          <div class="module-head"><h3>Danmu.py</h3><p>弹幕 → ASS · L11–141</p></div>
+          <div class="function-grid">
+            <article class="function-card"><div class="fn-top"><code class="fn-name">Danmu(sn, full_filename, cookies)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">保存弹幕请求和输出所需上下文。</p><div class="contract"><div><b>入参</b><code>sn: int|str；full_filename: str；cookies: Mapping</code></div><div><b>出参</b><code>Danmu 实例；__init__ 为 None</code></div><div><b>状态</b><code>_sn/_full_filename/_cookies</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">get_BGRcolor(RGBcolor)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">把 6 位 RGB 十六进制交换为 ASS 所需 BGR。</p><div class="contract"><div><b>入参</b><code>RGBcolor: str，如 'FF8800'（不含 #）</code></div><div><b>出参</b><code>str，如 '0088FF'</code></div><div><b>校验</b><code>无长度/字符校验</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">find_ban_word(text, ban_word_re)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">查找首个非空的屏蔽词匹配。</p><div class="contract"><div><b>入参</b><code>text: str；ban_word_re: compiled Pattern</code></div><div><b>出参</b><code>str 匹配文本 | None | ''</code></div><div><b>调用者</b><code>download()</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">download(ban_words)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">下载弹幕和在线屏蔽词，写模板并生成 Dialogue 行。</p><div class="contract"><div><b>入参</b><code>ban_words: list[str]，会被原地 append</code></div><div><b>出参</b><code>None；HTTP 非 200 时提前返回</code></div><div><b>状态</b><code>覆盖 full_filename；读取 DanmuTemplate.ass；网络 I/O</code></div><div><b>调用</b><code>find_ban_word/get_BGRcolor；随机滚动速度</code></div></div></article>
+          </div>
+        </div>
+
+        <div class="module-group" data-module="log">
+          <div class="module-head"><h3>ColorPrint.py</h3><p>横切日志 · L14–127</p></div>
+          <div class="function-grid">
+            <article class="function-card"><div class="fn-top"><code class="fn-name">read_log_settings()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">只读取日志相关配置，失败使用默认开启/保留 7 份。</p><div class="contract"><div><b>入参</b><code>无</code></div><div><b>出参</b><code>dict，至少含 save_logs/quantity_of_logs</code></div><div><b>状态</b><code>模块 import 时立即调用；可能 Config.del_bom</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">err_print(sn, err_msg, detail='', status=0, no_sn=False, prefix='', display=True, display_time=True)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">格式化一条状态消息，按严重度着色并按日追加日志。</p><div class="contract"><div><b>入参</b><code>sn:any；msg/detail/prefix:str；status:0|1|2；三个 bool</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>console 输出；logs/YYYY-MM-DD.log append</code></div><div><b>内部</b><code>succeed_or_failed_print(): None；tty/termcolor/Color</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">Color() / set_cmd_color(color)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">Windows Console API 颜色句柄与属性设置。</p><div class="contract"><div><b>入参</b><code>color: Windows bitmask</code></div><div><b>出参</b><code>Color 实例；set_cmd_color → WinAPI bool</code></div><div><b>状态</b><code>修改控制台文本属性</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">reset_color() / print_red_text(print_text) / print_green_text(print_text)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">复原默认色，或临时以红/绿高亮打印。</p><div class="contract"><div><b>入参</b><code>无；print_text: any printable</code></div><div><b>出参</b><code>均为 None</code></div><div><b>状态</b><code>设置颜色 → print → reset</code></div></div></article>
+          </div>
+        </div>
+
+        <div class="module-group" data-module="orchestration">
+          <div class="module-head"><h3>aniGamerPlus.py · 核心编排摘录</h3><p>省略 CLI/Server 表面 · L29–480</p></div>
+          <div class="function-grid">
+            <article class="function-card"><div class="fn-top"><code class="fn-name">port_is_available(port) / gost_port()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">测试 localhost TCP 端口；随机寻找 40000–60000 可用端口。</p><div class="contract"><div><b>入参</b><code>port: int；或无</code></div><div><b>出参</b><code>bool；int random_port</code></div><div><b>调用者</b><code>代理初始化、Dashboard 表面</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">build_anime(sn)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">容错构建 Anime，并应用全局弹幕开关和解析冷却。</p><div class="contract"><div><b>入参</b><code>sn: int|str</code></div><div><b>出参</b><code>{'anime': Anime|None, 'failed': bool}</code></div><div><b>状态</b><code>可能启动独立 gost 端口；sleep(parse_sn_cd)</code></div><div><b>异常</b><code>吞掉 TryTooManyTimeError/BaseException 并写日志</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">read_db_all() / read_db(sn)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">在线程锁内读取全部或单条 anime 状态。</p><div class="contract"><div><b>入参</b><code>无；sn: int</code></div><div><b>出参</b><code>list[dict]；dict</code></div><div><b>异常</b><code>单条不存在或空结果时抛 IndexError</code></div><div><b>状态</b><code>acquire/release db_locker；SQLite read</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">insert_db(anime)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">插入 SN、标题、番名与集数初始记录。</p><div class="contract"><div><b>入参</b><code>anime: Anime-like（需四个 getter）</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>INSERT + commit；重复主键仅日志</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">update_db(anime)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">把实例的下载/上传语义结果写回 SQLite。</p><div class="contract"><div><b>入参</b><code>Anime-like；读取 video_size/resolution/path/upload flag + getters</code></div><div><b>出参</b><code>None</code></div><div><b>规则</b><code>video_size &gt; 5 → status=1；upload flag → remote_status=1</code></div><div><b>状态</b><code>UPDATE + commit</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">check_tasks()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">把订阅清单与剧集列表、数据库状态合并成待处理 queue。</p><div class="contract"><div><b>入参</b><code>无显式入参；读取全局 sn_dict/settings/queue</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>构建 Anime、INSERT 新记录、向 queue 添加 sn_info</code></div><div><b>分支</b><code>all / latest / largest-sn / single</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">worker(sn, sn_info, realtime_show_file_size=False)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">单个任务的下载/上传事务与队列清理。</p><div class="contract"><div><b>入参</b><code>sn；sn_info={'tag','rename'}；realtime: bool</code></div><div><b>出参</b><code>正常 None；部分分支 sys.exit</code></div><div><b>状态</b><code>线程/上传信号量、queue、processing_queue、DB、文件/FTP</code></div><div><b>调用</b><code>read_db/build_anime → download → update_db → [upload → update_db]</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">download_cd_counter()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">下载结束后按 30 秒粒度倒计时，再释放下载槽位。</p><div class="contract"><div><b>入参</b><code>无；读取 settings.download_cd</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>sleep；最终 thread_limiter.release()</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">__download_only(sn, dl_resolution='', dl_save_dir='', realtime_show_file_size=False, classify=True)</code><span class="visibility">PRIVATE</span></div><p class="fn-summary">不操作 DB 的单集下载，按 video_size 最多重试三次。</p><div class="contract"><div><b>入参</b><code>sn；两个 str；两个 bool</code></div><div><b>出参</b><code>None；构建失败 sys.exit(1)</code></div><div><b>状态</b><code>下载信号量；Anime.renew；失败进度状态；冷却线程</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">__get_info_only(sn) / __get_danmu_only(sn, bangumi_name, video_path)</code><span class="visibility">PRIVATE</span></div><p class="fn-summary">查询单集信息；或为数据库已有影片补弹幕。</p><div class="contract"><div><b>入参</b><code>sn；后者再需 bangumi_name/video_path: str</code></div><div><b>出参</b><code>None</code></div><div><b>状态</b><code>信号量；打印信息或写 ASS</code></div><div><b>依赖</b><code>全局 resolution/classify/danmu/settings</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">do_request(url, headers, cookies, params=None) / parse_anime(soup, animes, headers, cookies)</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">“我的动画”导出的 GET 包装与页面解析器。</p><div class="contract"><div><b>入参</b><code>URL/header/cookie/params；BeautifulSoup/list/header/cookie</code></div><div><b>出参</b><code>Response；bool 是否还有订阅内容</code></div><div><b>状态</b><code>parse_anime 原地 append {'sn','name'} 到 animes</code></div></div></article>
+            <article class="function-card"><div class="fn-top"><code class="fn-name">export_my_anime()</code><span class="visibility public">PUBLIC</span></div><p class="fn-summary">分页导出用户订阅为可复用 sn 清单。</p><div class="contract"><div><b>入参</b><code>无；依赖 cookie.txt</code></div><div><b>出参</b><code>None；无 Cookie 提前 return</code></div><div><b>状态</b><code>分页网络 GET；覆盖 my_anime.txt</code></div><div><b>调用</b><code>read_cookie → do_request → parse_anime</code></div></div></article>
+          </div>
+        </div>
+      </section>
+
+      <section id="example" class="reveal">
+        <p class="section-kicker">Worked example</p>
+        <h2>贯穿示例：<code>sn=40035</code></h2>
+        <p class="section-intro">源码末尾把它作为调试示例。以下展示契约形状而非实时站点响应；标题、清晰度与 URL 使用示意值，避免把易变网络结果冒充静态事实。</p>
+        <div class="example">
+          <div class="example-copy"><p class="eyebrow">signal specimen</p><div class="big-sn">40035</div><h3>一次下载事务的状态切片</h3><p>注意：调用 <code>download()</code> 得到的不是结果对象。调用方必须在方法结束后读取实例字段。</p></div>
+          <div class="example-code"><pre><span class="c-muted"># 1. 构建：内部已完成配置与元数据抓取</span>
+anime = <span class="c-cyan">Anime</span>(<span class="c-amber">40035</span>)
+
+anime.get_episode_list()
+<span class="c-muted"># → {"1": 40035, "2": 40066, ...}  # 形状示意</span>
+
+anime.enable_danmu()
+anime.download(
+  resolution=<span class="c-amber">"1080"</span>,
+  bangumi_tag=<span class="c-amber">"本季追番"</span>,
+  rename=<span class="c-amber">"自定义番名"</span>,
+  classify=<span class="c-cyan">True</span>
+)
+
+<span class="c-muted"># 2. 语义返回值在对象上，而不是 return</span>
+anime.video_resolution   <span class="c-muted"># → 1080 或最近可用档</span>
+anime.video_size         <span class="c-muted"># → 347（MB，示意）</span>
+anime.local_video_path   <span class="c-muted"># → /.../本季追番/...mp4</span>
+
+<span class="c-muted"># 3. 编排层据此更新状态</span>
+<span class="c-cyan">update_db</span>(anime)
+<span class="c-muted"># video_size &gt; 5 → status = 1</span>
+
+ok = anime.upload(<span class="c-amber">"本季追番"</span>)
+<span class="c-muted"># → bool；同时写 upload_succeed_flag</span></pre></div>
+        </div>
+      </section>
+
+      <section id="risks" class="reveal">
+        <p class="section-kicker">Engineering notes</p>
+        <h2>阅读调用链后最值得记住的事</h2>
+        <p class="section-intro">这些不是对功能的否定，而是调用者、维护者和重构者最容易踩到的契约边角。</p>
+        <div class="risk-grid">
+          <article class="risk"><b>成功由副作用表达</b><p><code>download()</code> 无布尔返回；核心编排以 <code>video_size &gt; 5</code> 判断成功。直接集成时不能只检查异常或返回值。</p></article>
+          <article class="risk"><b>异常层级非常规</b><p><code>TryTooManyTimeError</code> 继承 <code>BaseException</code> 而非 <code>Exception</code>；常见的 <code>except Exception</code> 接不住它。</p></article>
+          <article class="risk"><b>存在进程级可变状态</b><p><code>Config.cookie</code>、<code>tasks_progress_rate</code>、队列与信号量都是共享可变对象；函数签名没有完整表达其依赖。</p></article>
+          <article class="risk"><b>HTTP 头可能跨请求残留</b><p><code>__request()</code> 令 <code>current_header = self._req_header</code> 后原地合并 <code>addition_header</code>，附加头可能留给同实例后续请求。</p></article>
+          <article class="risk"><b>部分失败直接结束进程/线程</b><p>无效 SN、地区限制、VIP 锁定、广告校验等路径会 <code>sys.exit(1)</code>，不是统一异常或错误值。</p></article>
+          <article class="risk"><b>get_local_ip 异常分支有缺陷</b><p>连接失败时源码调用 <code>local_ip.close()</code>，但该变量尚未赋值；预期应关闭 socket 并提供回退值。</p></article>
+          <article class="note"><b>debug_mode 不是“多打印日志”</b><p><code>Anime(debug_mode=True)</code> 会跳过代理、请求头和全部元数据抓取，得到的是未准备完成的壳对象。</p></article>
+          <article class="note"><b>ban_words 会被修改</b><p><code>Danmu.download()</code> 将在线屏蔽词 append 到传入列表。若直接传配置中的列表，同一进程多次调用会累积条目。</p></article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer>基于本地源码提交 <span class="mono">c6dce4a0f55ce7697d6ce2e63f477cb0f07a7422</span> · 仅静态分析，不发起动画站点请求</footer>
+
+  <script>
+    const tabs = document.querySelectorAll('.journey-tab');
+    tabs.forEach(tab => tab.addEventListener('click', () => {
+      tabs.forEach(item => {
+        item.classList.remove('active');
+        item.setAttribute('aria-selected', 'false');
+      });
+      document.querySelectorAll('.journey-panel').forEach(panel => panel.classList.remove('active'));
+      tab.classList.add('active');
+      tab.setAttribute('aria-selected', 'true');
+      document.getElementById(tab.dataset.panel).classList.add('active');
+    }));
+
+    const search = document.getElementById('functionSearch');
+    const filters = document.querySelectorAll('.filter');
+    let activeFilter = 'all';
+    function filterCatalog() {
+      const term = search.value.trim().toLowerCase();
+      document.querySelectorAll('.module-group').forEach(group => {
+        const moduleMatches = activeFilter === 'all' || group.dataset.module === activeFilter;
+        let visible = 0;
+        group.querySelectorAll('.function-card').forEach(card => {
+          const match = moduleMatches && card.textContent.toLowerCase().includes(term);
+          card.classList.toggle('hidden', !match);
+          if (match) visible += 1;
+        });
+        group.classList.toggle('hidden', visible === 0);
+      });
+    }
+    search.addEventListener('input', filterCatalog);
+    filters.forEach(button => button.addEventListener('click', () => {
+      filters.forEach(item => item.classList.remove('active'));
+      button.classList.add('active');
+      activeFilter = button.dataset.filter;
+      filterCatalog();
+    }));
+
+    const revealObserver = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: .08 });
+    document.querySelectorAll('.reveal').forEach(el => revealObserver.observe(el));
+
+    const sections = [...document.querySelectorAll('main section')];
+    const links = [...document.querySelectorAll('.toc a')];
+    const tocObserver = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          links.forEach(link => link.classList.toggle('active', link.getAttribute('href') === '#' + entry.target.id));
+        }
+      });
+    }, { rootMargin: '-20% 0px -65% 0px' });
+    sections.forEach(section => tocObserver.observe(section));
+  </script>
+</body>
+</html>
