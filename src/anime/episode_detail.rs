@@ -21,6 +21,7 @@ pub struct EpisodeDetail {
     pub(super) episode: String,
     pub(super) season: String,
     pub(super) name: String,
+    pub(super) title: String,
 }
 
 impl EpisodeDetail {
@@ -48,15 +49,21 @@ impl EpisodeDetail {
             episode,
             season: season_with_extra,
             name,
+            title: title.to_owned(),
         })
     }
 
     pub async fn ensure_bangumi_dir(&self) -> Result<(), std::io::Error> {
         fs::create_dir_all(BANGUMI_DIR_PATH.join(&self.name).join(&self.season)).await
     }
+
+    pub fn get_filename(&self) -> String {
+        todo!()
+    }
 }
 
 impl EpisodeDetail {
+    // TODO move test related to this file, to remove `pub(super)`
     pub(super) fn get_episode(title: &str) -> EpisodeDetailBuildResult<String> {
         MIN_EPISODE_REGEX
             .find(title)

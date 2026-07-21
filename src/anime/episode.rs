@@ -3,7 +3,8 @@ use std::{
     time::Duration,
 };
 
-use m3u8_rs::parse_master_playlist;
+use indexmap::IndexMap;
+use m3u8_rs::{MasterPlaylist, VariantStream, parse_master_playlist};
 use nom::Finish;
 use tokio::time;
 use url::Url;
@@ -130,12 +131,7 @@ impl Episode {
         let episode_detail = EpisodeDetail::from_sn(self.sn, self.request_client.clone()).await?;
         episode_detail.ensure_bangumi_dir().await?;
 
-        let select_resolution = { self.config.lock().unwrap().download_resolution.get_height() };
-        master_pl.variants.iter().find(|v| {
-            v.resolution
-                .map(|r| r.height == select_resolution)
-                .unwrap_or(false)
-        });
+        let variant = self.get_media_variant(master_pl)?;
 
         Ok(())
     }
@@ -320,5 +316,53 @@ impl Episode {
             .into_result()?;
 
         Ok(playlist)
+    }
+
+    fn get_media_variant(&self, master_pl: MasterPlaylist) -> AnimeDownloadResult<VariantStream> {
+        let resolution_map = master_pl
+            .variants
+            .into_iter()
+            .map(|variant| {
+                Ok::<(u64, VariantStream), AnimeDownloadError>((
+                    variant
+                        .resolution
+                        .ok_or(AnimeDownloadError::Plain(
+                            "include variant without resolution: \n{variant:#?}".to_string(),
+                        ))?
+                        .height,
+                    variant,
+                ))
+            })
+            .collect::<AnimeDownloadResult<IndexMap<u64, VariantStream>>>()?;
+
+        let select_resolution = { self.config.lock().unwrap().download_resolution.get_height() };
+        let variant = resolution_map.get(&select_resolution);
+        let selected = resolution_map.get(&select_resolution);
+
+        let lock_resolution = { self.config.lock().unwrap().lock_resolution };
+        if lock_resolution && selected.is_none() {
+            return Err(AnimeDownloadError::Plain(format!(
+                "there is no selected resolution, and locked resolution. available resolutions: {:?}",
+                resolution_map
+                    .keys()
+                    .map(|k| k.to_owned())
+                    .collect::<Vec<u64>>()
+            )));
+        }
+        let variant = variant.unwrap_or_else(|| {
+            let mut closest_vec = resolution_map
+                .iter()
+                .map(|(resolution, variant)| (resolution.abs_diff(select_resolution), variant))
+                .collect::<Vec<(u64, &VariantStream)>>();
+            closest_vec.sort_by_key(|v| v.0);
+            let selected = closest_vec[0].1;
+            tracing::info!(
+                resolution = %selected.resolution.expect("resolution should exist"),
+                "could not find selected resolution, chose closest resolution"
+            );
+            selected
+        });
+
+        Ok(variant.to_owned())
     }
 }

@@ -26,6 +26,8 @@ pub enum AnimeDownloadError {
     Io(#[from] std::io::Error),
     #[error("{0}")]
     EpisodeDetailBuild(#[from] EpisodeDetailBuildError),
+    #[error("{0}")]
+    Plain(String),
 }
 
 impl From<String> for AnimeDownloadError {
