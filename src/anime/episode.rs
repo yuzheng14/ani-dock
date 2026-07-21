@@ -133,6 +133,13 @@ impl Episode {
 
         let variant = self.get_media_variant(master_pl)?;
 
+        let file_name = episode_detail.get_filename(
+            variant
+                .resolution
+                .expect("it should have resolution")
+                .height,
+        );
+
         Ok(())
     }
 }

@@ -1,3 +1,5 @@
+use std::fmt::{self, Display, Formatter};
+
 use serde::{Deserialize, Serialize};
 use tokio::fs;
 
@@ -36,6 +38,12 @@ impl DownloadResolution {
             Self::P720 => 720,
             Self::P1080 => 1080,
         }
+    }
+}
+
+impl Display for DownloadResolution {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}p", self.get_height())
     }
 }
 
@@ -110,14 +118,14 @@ impl Default for InternalConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct Config {
-    /// /// 下载存放目录，动画将会以番剧为单位分文件夹存放，默认为 `bangumi`。
-    /// /// 相对路径时为程序所在目录的 `data` 文件夹子目录，绝对路径时为绝对路径。
-    /// /// 如文件夹不存在，将会自动创建。
-    /// pub bangumi_dir: String,
-    /// /// 临时目录位置，v9.0 开始下载中文件将会放在这里，完成后再转移至番剧目录，留空默认为在程序所在目录的 temp 文件夹下，默认为 `temp`。
-    /// /// 相对路径时为程序所在目录的 `data` 文件夹子目录，绝对路径时为绝对路径。
-    /// /// 如文件夹不存在，将会自动创建。
-    /// pub temp_dir: String,
+    // /// 下载存放目录，动画将会以番剧为单位分文件夹存放，默认为 `bangumi`。
+    // /// 相对路径时为程序所在目录的 `data` 文件夹子目录，绝对路径时为绝对路径。
+    // /// 如文件夹不存在，将会自动创建。
+    // pub bangumi_dir: String,
+    // /// 临时目录位置，v9.0 开始下载中文件将会放在这里，完成后再转移至番剧目录，留空默认为在程序所在目录的 temp 文件夹下，默认为 `temp`。
+    // /// 相对路径时为程序所在目录的 `data` 文件夹子目录，绝对路径时为绝对路径。
+    // /// 如文件夹不存在，将会自动创建。
+    // pub temp_dir: String,
     // 不开放此配置，默认以番剧为单位创建文件夹
     // /// 控制是否建立番劇資料夾
     // pub classify_bangumi: bool,
@@ -125,12 +133,12 @@ pub struct Config {
     // /// 控制是否建立季度子目錄
     // #[serde(default)]
     // pub classify_season: bool,
-    /// /// 番剧更新检查频率，单位为分钟，默认为 30 分钟。
-    /// pub check_frequency: u64,
-    /// /// 下载冷却时间(秒)，默认为 20 分钟。
-    /// pub download_cd: u64,
-    /// /// 每个番剧更新检查冷却实现（秒），默认为 5 秒。
-    /// pub parse_sn_cd: u64,
+    // /// 番剧更新检查频率，单位为分钟，默认为 30 分钟。
+    // pub check_frequency: u64,
+    // /// 下载冷却时间(秒)，默认为 20 分钟。
+    // pub download_cd: u64,
+    // /// 每个番剧更新检查冷却实现（秒），默认为 5 秒。
+    // pub parse_sn_cd: u64,
     /// 下载选取清晰度，若该清晰度不存在将会选取最近可用清晰度，可选 360 480 540 576 720 1080，默认为 1080。
     pub download_resolution: DownloadResolution,
     /// 是否锁定清晰度，如果指定清晰度不存在，则放弃下载
@@ -142,47 +150,47 @@ pub struct Config {
     /// 是否优先移动文件，而不是复制文件。如果跨设备/文件系统移动，可以设置为 false，
     /// 文件将会先复制到目标文件夹，再删除源文件。避免移动失败的问题，默认为 true。
     pub prefer_move: bool,
-    /// 最大并发下载数，最高为 5，超过将重置为 5。安全起见，默认值为 1。
-    pub multi_thread: u32,
-    /// /// ftp 上传最大并发数，最高为 3，超过将重置为 3
-    /// pub multi_upload: u32,
-    /// /// 分段下载模式，速度更快，容错率更高
-    /// pub segment_download_mode: bool,
+    // /// 最大并发下载数，最高为 5，超过将重置为 5。安全起见，默认值为 1。
+    // pub multi_thread: u32,
+    // /// ftp 上传最大并发数，最高为 3，超过将重置为 3
+    // pub multi_upload: u32,
+    // /// 分段下载模式，速度更快，容错率更高
+    // pub segment_download_mode: bool,
     /// 每个视频最大并发下载分段数，仅在 `segment_download_mode` 为 true 时有效，最高为 5，超过将重置为 5。
     /// 默认值为 2。
     pub multi_downloading_segment: u32,
     /// 在分段下载模式时有效，每个分段最大重试次数，-1 为无限重试。默认值为 8。
     pub segment_max_retry: i32,
-    /// /// 是否在视频文件名中添加番剧名，格式举例: [番剧名]。
-    /// /// 如果为 false，则只有集数。默认值为 true。
-    /// pub add_bangumi_name_to_video_filename: bool,
-    /// /// 是否在视频文件名中添加清晰度，格式举例: [1080P]。默认值为 true。
-    /// pub add_resolution_to_video_filename: bool,
-    /// /// 视频文件名自定义前缀，默认值为 【動畫瘋】。
-    /// pub customized_video_filename_prefix: String,
-    /// /// 视频文件名中番剧名的后缀，集数之前。默认值为空。
-    /// pub customized_bangumi_name_suffix: String,
-    /// /// 视频文件名后缀。默认值为空。
-    /// pub customized_video_filename_suffix: String,
-    /// /// 视频文件扩展名，ts, mov, mkv 经过测试可以使用，但 flv 不支持，非 mp4 扩展名 faststart_movflags 将强制为 false。默认值为 mp4。
-    /// pub video_filename_extension: VideoPackageExtension,
-    /// /// 剧集名补零，填写补足位数，例: 填写 2 剧集名称为 01，填写 3 剧集名称为 001。默认值为 1。
-    /// pub zerofill: u32,
+    // /// 是否在视频文件名中添加番剧名，格式举例: [番剧名]。
+    // /// 如果为 false，则只有集数。默认值为 true。
+    // pub add_bangumi_name_to_video_filename: bool,
+    // /// 是否在视频文件名中添加清晰度，格式举例: [1080P]。默认值为 true。
+    // pub add_resolution_to_video_filename: bool,
+    // /// 视频文件名自定义前缀，默认值为 【動畫瘋】。
+    // pub customized_video_filename_prefix: String,
+    // /// 视频文件名中番剧名的后缀，集数之前。默认值为空。
+    // pub customized_bangumi_name_suffix: String,
+    // /// 视频文件名后缀。默认值为空。
+    // pub customized_video_filename_suffix: String,
+    // /// 视频文件扩展名，ts, mov, mkv 经过测试可以使用，但 flv 不支持，非 mp4 扩展名 faststart_movflags 将强制为 false。默认值为 mp4。
+    // pub video_filename_extension: VideoPackageExtension,
+    // /// 剧集名补零，填写补足位数，例: 填写 2 剧集名称为 01，填写 3 剧集名称为 001。默认值为 1。
+    // pub zerofill: u32,
     /// 请求UA，需要和获取cookie的浏览器相同
     pub ua: String,
-    /// /// 代理开关
-    /// pub use_proxy: bool,
+    // /// 代理开关
+    // pub use_proxy: bool,
     /// 代理配置
     pub proxy: Option<String>,
-    /// /// 为 true 时，对 Akamai CDN 的请求不走代理
-    /// pub no_proxy_akamai: bool,
+    // /// 为 true 时，对 Akamai CDN 的请求不走代理
+    // pub no_proxy_akamai: bool,
     // TODO 暂不实现
     // /// 上传功能开关
     // pub upload_to_server: bool,
     // /// FTP配置
     // pub ftp: FtpSettings,
-    /// /// 命令行模式使用 -u 参数有效, 在命令行模式下完成所有任务后执行的命令。默认值为空。
-    /// pub user_command: String,
+    // /// 命令行模式使用 -u 参数有效, 在命令行模式下完成所有任务后执行的命令。默认值为空。
+    // pub user_command: String,
     // FIXME 酷 Q 似乎已经凉了，先观察观察
     // /// 酷 Q 推送（README 中原 `coolq_notify` 與 `coolq_settings`）
     // #[serde(default)]
@@ -190,10 +198,10 @@ pub struct Config {
     // TODO 暂不实现
     // /// 适配 PLEX 命名规则。默认值为 false。
     // pub plex_naming: bool,
-    /// /// 是否将视频 metadata 前置, 启用此功能时在线观看会更快播放, 仅在 video_filename_extension 为 mp4 时有效。默认值为 false。
-    /// pub faststart_movflags: bool,
-    /// /// 是否添加音轨标签，只有分段下载模式有效。默认值为 false。
-    /// pub audio_language: bool,
+    // /// 是否将视频 metadata 前置, 启用此功能时在线观看会更快播放, 仅在 video_filename_extension 为 mp4 时有效。默认值为 false。
+    // pub faststart_movflags: bool,
+    // /// 是否添加音轨标签，只有分段下载模式有效。默认值为 false。
+    // pub audio_language: bool,
     /// 使用移动端API进行视频解析。默认值为 false。
     pub use_mobile_api: bool,
     /// 是否下载弹幕(已包含动画疯内置的关键字过滤)。默认值为 false。
@@ -204,10 +212,10 @@ pub struct Config {
     // TODO 暂不实现
     // /// 是否检查更新。默认值为 true。
     // pub check_latest_version: bool,
-    /// /// 是否在检查更新时读取 `sn_list.txt`, 开启后对 `sn_list.txt` 的更改将会在下次检查更新时生效而不用重启程序。默认值为 true。
-    /// pub read_sn_list_when_checking_update: bool,
-    /// /// 是否在检查更新时读取配置文件, 开启后对配置文件的更改将会在下次检查时更新生效而不用重启程序。默认值为 true。
-    /// pub read_config_when_checking_update: bool,
+    // /// 是否在检查更新时读取 `sn_list.txt`, 开启后对 `sn_list.txt` 的更改将会在下次检查更新时生效而不用重启程序。默认值为 true。
+    // pub read_sn_list_when_checking_update: bool,
+    // /// 是否在检查更新时读取配置文件, 开启后对配置文件的更改将会在下次检查时更新生效而不用重启程序。默认值为 true。
+    // pub read_config_when_checking_update: bool,
     /// 非VIP广告等待时间, 如果等待时间不足, 程序会自行追加时间 (最大20秒)。默认值为 25。
     pub ads_time: u32,
     /// 使用移动端 API 解析的广告等待时间。默认值为 25。
@@ -233,7 +241,7 @@ impl Default for Config {
             only_use_vip: Default::default(),
             default_download_mode: Default::default(),
             prefer_move: true,
-            multi_thread: 1,
+            // multi_thread: 1,
             multi_downloading_segment: 2,
             segment_max_retry: 8,
             ua: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0".to_string(),
@@ -275,7 +283,7 @@ impl Config {
     }
 
     fn normalize(&mut self) {
-        self.multi_thread = self.multi_thread.clamp(1, 5);
+        // self.multi_thread = self.multi_thread.clamp(1, 5);
         self.multi_downloading_segment = self.multi_downloading_segment.clamp(1, 5);
 
         if self.quantity_of_logs < 1 {
@@ -347,6 +355,22 @@ mod test {
         Ok(())
     }
 
+    #[test]
+    fn download_resolution_converts_to_string() {
+        let cases = [
+            (DownloadResolution::P360, "360p"),
+            (DownloadResolution::P480, "480p"),
+            (DownloadResolution::P540, "540p"),
+            (DownloadResolution::P576, "576p"),
+            (DownloadResolution::P720, "720p"),
+            (DownloadResolution::P1080, "1080p"),
+        ];
+
+        for (resolution, expected) in cases {
+            assert_eq!(resolution.to_string(), expected);
+        }
+    }
+
     #[tokio::test]
     async fn read_config_creates_missing_file_with_defaults() -> Result<(), Box<dyn Error>> {
         let _config_file = TestConfigFile::new();
@@ -365,7 +389,7 @@ mod test {
     async fn read_config_reads_existing_file() -> Result<(), Box<dyn Error>> {
         let _config_file = TestConfigFile::new();
         let expected = Config {
-            multi_thread: 3,
+            // multi_thread: 3,
             proxy: Some("http://127.0.0.1:8080".to_string()),
             danmu_ban_words: vec!["spoiler".to_string()],
             ..Config::default()
@@ -398,7 +422,7 @@ mod test {
         ) in cases
         {
             let config = Config {
-                multi_thread,
+                // multi_thread,
                 multi_downloading_segment,
                 quantity_of_logs,
                 ..Config::default()
@@ -407,7 +431,7 @@ mod test {
 
             let normalized = Config::read_config().await?;
 
-            assert_eq!(normalized.multi_thread, expected_multi_thread);
+            // assert_eq!(normalized.multi_thread, expected_multi_thread);
             assert_eq!(
                 normalized.multi_downloading_segment,
                 expected_multi_downloading_segment
