@@ -11,7 +11,7 @@ use crate::{
         error::EpisodeDetailBuildError,
         util::get_anime_video_result_from_sn,
     },
-    constant::BANGUMI_DIR_PATH,
+    constant::{BANGUMI_DIR_PATH, TMP_DIR_PATH},
     request::RequestClient,
     util::santitize_path_segment,
 };
@@ -65,6 +65,12 @@ impl EpisodeDetail {
 
     pub fn bangumi_dir(&self) -> PathBuf {
         BANGUMI_DIR_PATH
+            .join(santitize_path_segment(&self.name))
+            .join(santitize_path_segment(&self.season))
+    }
+
+    pub fn tmp_dir(&self) -> PathBuf {
+        TMP_DIR_PATH
             .join(santitize_path_segment(&self.name))
             .join(santitize_path_segment(&self.season))
     }
@@ -246,6 +252,27 @@ mod test {
             let episode_detail = EpisodeDetail::from_title(title).unwrap();
 
             assert_eq!(episode_detail.bangumi_dir(), expected);
+        }
+    }
+
+    #[test]
+    fn tmp_dir() {
+        let expected = [
+            TMP_DIR_PATH.join("進擊的巨人").join("第一季"),
+            TMP_DIR_PATH
+                .join("劇場版 關於我轉生變成史萊姆這檔事 蒼海之淚篇")
+                .join("電影"),
+            TMP_DIR_PATH
+                .join("無職轉生～到了異世界就拿出真本事～")
+                .join("第三季"),
+            TMP_DIR_PATH.join("進擊的巨人").join("第一季 中文配音"),
+            TMP_DIR_PATH.join("Re：Zero／新編集版？").join("第一季"),
+        ];
+
+        for (title, expected) in ANIME_TITLES.iter().zip(expected) {
+            let episode_detail = EpisodeDetail::from_title(title).unwrap();
+
+            assert_eq!(episode_detail.tmp_dir(), expected);
         }
     }
 
