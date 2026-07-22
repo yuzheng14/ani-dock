@@ -81,7 +81,7 @@ impl Episode {
     }
 
     #[tracing::instrument]
-    pub async fn download(&self, anime: Arc<Anime>) -> AnimeDownloadResult {
+    pub async fn download(&self) -> AnimeDownloadResult {
         if !FFmpeg::exist().await? {
             return Err(FFmpegError::FFmpegNotExist.into());
         }

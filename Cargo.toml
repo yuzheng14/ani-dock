@@ -3,6 +3,13 @@ name = "ani-gamer-pro"
 version = "0.1.0"
 edition = "2024"
 
+[workspace]
+resolve = "2"
+members = ["tests/e2e"]
+
+[workspace.dependencies]
+ani-gamer-pro = { path = "." }
+
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
 thiserror = "2.0.18"

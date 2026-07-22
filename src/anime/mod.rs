@@ -27,6 +27,24 @@ pub struct Anime {
 }
 
 impl Anime {
+    pub fn sn(&self) -> u32 {
+        self.sn
+    }
+
+    pub fn episodes(&self) -> &IndexMap<String, Vec<Episode>> {
+        &self.episodes
+    }
+
+    pub fn cover(&self) -> &str {
+        &self.cover
+    }
+
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+}
+
+impl Anime {
     pub async fn from_episode_sn(
         sn: u32,
         device_id: DeviceId,
