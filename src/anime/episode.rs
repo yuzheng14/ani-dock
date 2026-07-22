@@ -4,7 +4,7 @@ use std::{
 };
 
 use indexmap::IndexMap;
-use m3u8_rs::{MasterPlaylist, VariantStream, parse_master_playlist};
+use m3u8_rs::{MasterPlaylist, MediaPlaylist, VariantStream, parse_master_playlist};
 use nom::Finish;
 use tokio::time;
 use url::Url;
@@ -14,7 +14,7 @@ use crate::{
     Anime,
     anime::{episode_detail::EpisodeDetail, error::AnimeDownloadError},
     config::Config,
-    constant::ORIGIN,
+    constant::{BANGUMI_DIR_PATH, ORIGIN},
     device_id::DeviceId,
     ffmpeg::{FFmpeg, FFmpegError},
     request::{
@@ -139,6 +139,13 @@ impl Episode {
                 .expect("it should have resolution")
                 .height,
         );
+
+        let file_path = episode_detail.bangumi_dir().join(&file_name);
+
+        let tmp_dir_path = episode_detail.tmp_dir().join(file_name);
+
+        let media_pl_src = Url::parse(src)?.join(&variant.uri)?;
+        self.get_media_playlist(&variant, media_pl_src);
 
         Ok(())
     }
@@ -371,5 +378,24 @@ impl Episode {
         });
 
         Ok(variant.to_owned())
+    }
+
+    async fn get_media_playlist(
+        &self,
+        variant: &VariantStream,
+        pl_src: Url,
+    ) -> AnimeDownloadResult<MediaPlaylist> {
+        todo!();
+        let playlist = self
+            .request_client
+            .get(pl_src, true)
+            .header(REFERER, get_referer(self.sn))
+            .send()
+            .await?
+            .error_for_status()?
+            .bytes()
+            .await?;
+
+        Ok(())
     }
 }
