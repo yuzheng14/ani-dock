@@ -5,7 +5,7 @@ pub static APP_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
         .expect("Could not get config dir")
         .home_dir()
         .to_owned()
-        .join(".ani-gamer-pro")
+        .join(".ani-dock")
 });
 
 #[cfg(not(test))]
@@ -61,7 +61,7 @@ mod test {
     #[cfg(target_os = "macos")]
     #[test]
     fn app_dir_on_macos() -> Result<(), Box<dyn Error>> {
-        assert_eq!(APP_DIR.as_path(), get_home_dir()?.join(".ani-gamer-pro"));
+        assert_eq!(APP_DIR.as_path(), get_home_dir()?.join(".ani-dock"));
 
         Ok(())
     }
@@ -71,9 +71,7 @@ mod test {
     fn config_file_path_on_macos() -> Result<(), Box<dyn Error>> {
         assert_eq!(
             CONFIG_FILE_PATH.as_path(),
-            get_home_dir()?
-                .join(".ani-gamer-pro")
-                .join("config.test.toml")
+            get_home_dir()?.join(".ani-dock").join("config.test.toml")
         );
 
         Ok(())
@@ -84,9 +82,7 @@ mod test {
     fn sn_list_file_path_on_macos() -> Result<(), Box<dyn Error>> {
         assert_eq!(
             SN_LIST_FILE_PATH.as_path(),
-            get_home_dir()?
-                .join(".ani-gamer-pro")
-                .join("sn_list.test.toml")
+            get_home_dir()?.join(".ani-dock").join("sn_list.test.toml")
         );
 
         Ok(())
@@ -97,7 +93,7 @@ mod test {
     fn db_file_path_on_macos() -> Result<(), Box<dyn Error>> {
         assert_eq!(
             DB_FILE_PATH.as_path(),
-            get_home_dir()?.join(".ani-gamer-pro").join("data.test.db")
+            get_home_dir()?.join(".ani-dock").join("data.test.db")
         );
 
         Ok(())
@@ -108,9 +104,7 @@ mod test {
     fn cookie_file_path_on_macos() -> Result<(), Box<dyn Error>> {
         assert_eq!(
             COOKIE_FILE_PATH.as_path(),
-            get_home_dir()?
-                .join(".ani-gamer-pro")
-                .join("cookie.test.txt")
+            get_home_dir()?.join(".ani-dock").join("cookie.test.txt")
         );
 
         Ok(())

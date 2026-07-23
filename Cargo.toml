@@ -1,5 +1,5 @@
 [package]
-name = "ani-gamer-pro"
+name = "ani-dock"
 version = "0.1.0"
 edition = "2024"
 
@@ -8,7 +8,7 @@ resolver = "2"
 members = ["tests/e2e"]
 
 [workspace.dependencies]
-ani-gamer-pro = { path = "." }
+ani-dock = { path = "." }
 
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }

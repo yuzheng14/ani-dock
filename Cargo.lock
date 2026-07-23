@@ -33,7 +33,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ani-gamer-pro"
+name = "ani-dock"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -406,7 +406,7 @@ dependencies = [
 name = "e2e"
 version = "0.1.0"
 dependencies = [
- "ani-gamer-pro",
+ "ani-dock",
  "tokio",
  "tracing-subscriber",
 ]
