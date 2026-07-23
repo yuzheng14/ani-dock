@@ -279,15 +279,29 @@ impl Episode {
                 .append_pair("hash", &random_string(12));
         };
 
-        let token = self
+        // let token = self
+        //     .request_client
+        //     .get(url, true)
+        //     .header(REFERER, get_referer(self.sn))
+        //     .send()
+        //     .await?
+        //     .error_for_status()?
+        //     .json::<DirectDataResponseBody<Token, TokenError>>()
+        //     .await?
+        //     .into_result()?;
+        let token_text = self
             .request_client
             .get(url, true)
             .header(REFERER, get_referer(self.sn))
             .send()
             .await?
             .error_for_status()?
-            .json::<DirectDataResponseBody<Token, TokenError>>()
-            .await?
+            .text()
+            .await?;
+        println!("{token_text}");
+
+        let token = serde_json::from_str::<DirectDataResponseBody<Token, TokenError>>(&token_text)
+            .map_err(|err| AnimeDownloadError::Plain(format!("parse json error: {err}")))?
             .into_result()?;
 
         Ok(token)
