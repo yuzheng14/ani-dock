@@ -58,6 +58,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ani-dock-db"
+version = "0.1.0"
+dependencies = [
+ "ani-dock-core",
+ "tokio",
+]
+
+[[package]]
 name = "ani-dock-server"
 version = "0.1.0"
 dependencies = [

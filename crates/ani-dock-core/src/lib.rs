@@ -1,7 +1,7 @@
 pub(crate) mod anime;
 // pub(crate) mod anime_episode;
 pub(crate) mod config;
-pub(crate) mod constant;
+pub mod constant;
 pub(crate) mod cookie;
 pub(crate) mod device_id;
 pub(crate) mod error;
@@ -12,6 +12,7 @@ pub(crate) mod util;
 
 pub use anime::{Anime, episode::Episode};
 pub use config::Config;
+// pub use constant;
 pub use cookie::Cookie;
 pub use device_id::DeviceId;
 pub use error::Error;
