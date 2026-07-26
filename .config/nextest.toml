@@ -7,18 +7,18 @@ cookie-file-tests = { max-threads = 1 }
 [profile.default]
 default-filter = "not package(e2e)"
 
+[[profile.default.overrides]]
+filter = "test(config::test::)"
+test-group = "config-file-tests"
+
+[[profile.default.overrides]]
+filter = "test(sn_list::test::)"
+test-group = "sn-list-file-tests"
+
+[[profile.default.overrides]]
+filter = "test(cookie::test::)"
+test-group = "cookie-file-tests"
+
 # run e2e when run cargo nextest include e2e manually
 [profile.e2e]
 default-filter = "package(e2e)"
-
-[[profile.default.overrides]]
-filter = 'test(config::test::)'
-test-group = 'config-file-tests'
-
-[[profile.default.overrides]]
-filter = 'test(sn_list::test::)'
-test-group = 'sn-list-file-tests'
-
-[[profile.default.overrides]]
-filter = 'test(cookie::test::)'
-test-group = 'cookie-file-tests'

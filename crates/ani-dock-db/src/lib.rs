@@ -1,8 +1,15 @@
 use ani_dock_core::constant::DB_FILE_PATH;
+use sqlx::{
+    Pool, Sqlite,
+    sqlite::{SqliteConnectOptions, SqlitePoolOptions},
+};
 use tokio::fs;
 
-pub mod error;
-pub async fn ensure_db_file_exist() -> Result<(), std::io::Error> {
+mod input;
+mod model;
+pub mod repository;
+
+pub async fn ensure_db_dir_exist() -> Result<(), std::io::Error> {
     let db_parent_dir = DB_FILE_PATH.parent().ok_or(std::io::Error::new(
         std::io::ErrorKind::AddrNotAvailable,
         format!("无法找到 db 目录的上级目录 {}", DB_FILE_PATH.display()),
@@ -10,7 +17,18 @@ pub async fn ensure_db_file_exist() -> Result<(), std::io::Error> {
 
     fs::create_dir_all(db_parent_dir).await?;
 
-    todo!();
-
     Ok(())
+}
+
+pub async fn get_conn_pool() -> Result<Pool<Sqlite>, sqlx::Error> {
+    let conn_option = SqliteConnectOptions::new()
+        .create_if_missing(true)
+        .filename(DB_FILE_PATH.as_path())
+        .create_if_missing(true)
+        .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
+
+    SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect_with(conn_option)
+        .await
 }

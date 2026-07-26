@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread"] }
 ani-dock-core = { workspace = true }
-tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }

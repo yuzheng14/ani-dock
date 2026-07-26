@@ -3,3 +3,6 @@ aniGamerPlus
 config.toml
 
 report.html
+
+/crates/ani-dock-db/schema.sqlite-shm
+/crates/ani-dock-db/schema.sqlite-wal
