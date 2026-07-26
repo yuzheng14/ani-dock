@@ -12,8 +12,6 @@ pub enum CookieError {
         #[source]
         source: std::io::Error,
     },
-    #[error("could not find cookie file")]
-    NotFound,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -53,24 +51,24 @@ impl Cookie {
     }
 
     pub async fn read_cookie() -> Result<Self, CookieError> {
-        match fs::try_exists(COOKIE_FILE_PATH.as_path())
+        if !fs::try_exists(COOKIE_FILE_PATH.as_path())
             .await
             .map_err(|source| CookieError::IO {
                 desp: "判断 cookie 文件是否存在错误".into(),
                 source,
-            })? {
-            true => {
-                let contents = fs::read_to_string(COOKIE_FILE_PATH.as_path())
-                    .await
-                    .map_err(|source| CookieError::IO {
-                        desp: "读取 cookie 文件发生错误".into(),
-                        source,
-                    })?;
-
-                Ok(Cookie(contents.trim_end_matches(['\r', '\n']).to_string()))
-            }
-            false => Err(CookieError::NotFound),
+            })?
+        {
+            return Ok(Self::default());
         }
+
+        let contents = fs::read_to_string(COOKIE_FILE_PATH.as_path())
+            .await
+            .map_err(|source| CookieError::IO {
+                desp: "读取 cookie 文件发生错误".into(),
+                source,
+            })?;
+
+        Ok(Cookie(contents.trim_end_matches(['\r', '\n']).to_string()))
     }
 }
 
@@ -113,14 +111,15 @@ mod test {
     }
 
     #[tokio::test]
-    async fn read_cookie_reports_missing_file() {
+    async fn read_cookie_returns_default_when_file_is_missing() -> Result<(), Box<dyn Error>> {
         let _cookie_file = TestCookieFile::new();
 
-        let error = Cookie::read_cookie()
-            .await
-            .expect_err("a missing cookie file should fail");
+        let cookie = Cookie::read_cookie().await?;
 
-        assert!(matches!(error, CookieError::NotFound));
+        assert_eq!(cookie, Cookie::default());
+        assert_eq!(cookie.as_str(), "");
+
+        Ok(())
     }
 
     #[tokio::test]
