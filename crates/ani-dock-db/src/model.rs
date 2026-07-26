@@ -6,7 +6,6 @@ pub struct Anime {
     pub id: Uuid,
     pub sn: u32,
     pub cover: String,
-    pub title: String,
 
     pub series: IndexMap<String, Vec<Episode>>,
 

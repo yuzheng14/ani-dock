@@ -1,9 +1,29 @@
 use std::fmt::{self, Display, Formatter};
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use tokio::fs;
 
-use crate::{constant::CONFIG_FILE_PATH, error::ConfigError};
+use crate::constant::CONFIG_FILE_PATH;
+
+#[derive(Debug, Error)]
+pub enum ConfigError {
+    // #[error("encounter io error when manipulate config file: {0}")]
+    // IO(#[from] std::io::Error),
+    #[error("文件操作发生错误：{desp}")]
+    IO {
+        desp: String,
+
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("序列化配置文件错误：{0}")]
+    SerializeConfigFile(#[from] toml::ser::Error),
+
+    #[error("反序列化配置文件错误：{0}")]
+    DeserializeConfigFile(#[from] toml::de::Error),
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 pub enum DownloadResolution {
@@ -260,11 +280,24 @@ impl Default for Config {
 
 impl Config {
     pub async fn read_config() -> Result<Self, ConfigError> {
-        if !fs::try_exists(CONFIG_FILE_PATH.as_path()).await? {
-            Config::default().write_config().await?
+        if !fs::try_exists(CONFIG_FILE_PATH.as_path())
+            .await
+            .map_err(|err| ConfigError::IO {
+                desp: "判断配置文件是否存在报错".into(),
+                source: err,
+            })?
+        {
+            let config = Self::default();
+            config.write_config().await?;
+            return Ok(config);
         }
 
-        let contents = fs::read_to_string(CONFIG_FILE_PATH.as_path()).await?;
+        let contents = fs::read_to_string(CONFIG_FILE_PATH.as_path())
+            .await
+            .map_err(|source| ConfigError::IO {
+                desp: "读取配置文件失败".into(),
+                source,
+            })?;
 
         let mut config = toml::from_str::<Config>(&contents)?;
         config.normalize();
@@ -274,10 +307,20 @@ impl Config {
 
     pub async fn write_config(&self) -> Result<(), ConfigError> {
         if let Some(parent) = CONFIG_FILE_PATH.parent() {
-            fs::create_dir_all(parent).await?;
+            fs::create_dir_all(parent)
+                .await
+                .map_err(|source| ConfigError::IO {
+                    desp: "创建配置文件父级目录失败".into(),
+                    source,
+                })?;
         }
 
-        fs::write(CONFIG_FILE_PATH.as_path(), toml::to_string_pretty(&self)?).await?;
+        fs::write(CONFIG_FILE_PATH.as_path(), toml::to_string_pretty(&self)?)
+            .await
+            .map_err(|source| ConfigError::IO {
+                desp: "写入配置文件失败".into(),
+                source,
+            })?;
 
         Ok(())
     }
@@ -470,7 +513,7 @@ mod test {
             .await
             .expect_err("invalid TOML should fail to parse");
 
-        assert!(matches!(error, ConfigError::TomlDe(_)));
+        assert!(matches!(error, ConfigError::DeserializeConfigFile(_)));
 
         Ok(())
     }
@@ -489,7 +532,7 @@ mod test {
             .await
             .expect_err("writing a config to a directory should fail");
 
-        assert!(matches!(read_error, ConfigError::IO(_)));
-        assert!(matches!(write_error, ConfigError::IO(_)));
+        assert!(matches!(read_error, ConfigError::IO { .. }));
+        assert!(matches!(write_error, ConfigError::IO { .. }));
     }
 }

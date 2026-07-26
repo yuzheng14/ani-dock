@@ -1,7 +1,25 @@
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use tokio::fs;
 
-use crate::{config::DownloadMode, constant::SN_LIST_FILE_PATH, error::SnListError};
+use crate::{config::DownloadMode, constant::SN_LIST_FILE_PATH};
+
+// TODO maybe should store this in db
+
+#[derive(Debug, Error)]
+pub enum SnListError {
+    #[error("文件操作发生错误：{desp}")]
+    IO {
+        desp: String,
+
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("encounter toml serialize error when writing sn list file: {0}")]
+    SerializeSnListFile(#[from] toml::ser::Error),
+    #[error("encounter toml parse error when reading sn list file: {0}")]
+    DeserializeSnListFile(#[from] toml::de::Error),
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SnDetail {
@@ -42,7 +60,12 @@ impl From<&SnList> for TomlSnList {
 impl SnList {
     pub async fn write_sn_list(&self) -> Result<(), SnListError> {
         if let Some(parent_path) = SN_LIST_FILE_PATH.parent() {
-            fs::create_dir_all(parent_path).await?
+            fs::create_dir_all(parent_path)
+                .await
+                .map_err(|source| SnListError::IO {
+                    desp: "创建 sn list 父级目录失败".into(),
+                    source,
+                })?
         }
 
         let toml_sn_list = TomlSnList::from(self);
@@ -50,17 +73,32 @@ impl SnList {
             SN_LIST_FILE_PATH.as_path(),
             toml::to_string_pretty(&toml_sn_list)?,
         )
-        .await?;
+        .await
+        .map_err(|source| SnListError::IO {
+            desp: "写入 sn list 文件失败".into(),
+            source,
+        })?;
 
         Ok(())
     }
 
     pub async fn read_sn_list() -> Result<Self, SnListError> {
-        if !fs::try_exists(SN_LIST_FILE_PATH.as_path()).await? {
+        if !fs::try_exists(SN_LIST_FILE_PATH.as_path())
+            .await
+            .map_err(|source| SnListError::IO {
+                desp: "判断 sn list 文件是否存在失败".into(),
+                source,
+            })?
+        {
             return Ok(Default::default());
         }
 
-        let contents = fs::read_to_string(SN_LIST_FILE_PATH.as_path()).await?;
+        let contents = fs::read_to_string(SN_LIST_FILE_PATH.as_path())
+            .await
+            .map_err(|source| SnListError::IO {
+                desp: "读取 sn list 文件失败".into(),
+                source,
+            })?;
         let toml_sn_list = toml::from_str::<TomlSnList>(&contents)?;
 
         Ok(toml_sn_list.into())
@@ -184,7 +222,7 @@ mod test {
             .await
             .expect_err("invalid TOML should fail to parse");
 
-        assert!(matches!(error, SnListError::TomlDe(_)));
+        assert!(matches!(error, SnListError::DeserializeSnListFile(_)));
 
         Ok(())
     }
@@ -203,7 +241,7 @@ mod test {
             .await
             .expect_err("writing an sn list to a directory should fail");
 
-        assert!(matches!(read_error, SnListError::IO(_)));
-        assert!(matches!(write_error, SnListError::IO(_)));
+        assert!(matches!(read_error, SnListError::IO { .. }));
+        assert!(matches!(write_error, SnListError::IO { .. }));
     }
 }

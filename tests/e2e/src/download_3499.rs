@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use ani_dock_core::{Anime, Config, Cookie, DeviceId, RequestClient};
+use ani_dock_core::{AnimeResolver, Config, Cookie, DeviceId, EpisodeDownloader, RequestClient};
 use tokio::fs;
 
 #[tokio::test]
@@ -17,16 +17,13 @@ async fn download_3499() -> Result<(), Box<dyn Error>> {
     let cookie = Cookie::new(cookie_string);
     let request_client = Arc::new(RequestClient::new(&config.lock().unwrap(), &cookie)?);
 
-    let anime = Anime::from_episode_sn(3499, device_id, request_client, config).await?;
+    let resolver = AnimeResolver::new(request_client.clone());
+    let downloader = EpisodeDownloader::new(request_client, config, device_id);
 
-    anime
-        .episodes()
-        .first()
-        .unwrap()
-        .1
-        .first()
-        .unwrap()
-        .download()
+    let anime = resolver.from_episode_sn(3499).await?;
+
+    downloader
+        .download(anime.series().first().unwrap().1.first().unwrap())
         .await?;
 
     Ok(())

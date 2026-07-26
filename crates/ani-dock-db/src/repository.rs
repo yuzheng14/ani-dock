@@ -27,13 +27,12 @@ impl AnimeRepository {
 
         sqlx::query!(
             r#"
-            INSERT INTO anime (id, sn, cover, title, create_at, update_at)
-            values ($1, $2, $3, $4, $5, $6);
+            INSERT INTO anime (id, sn, cover, create_at, update_at)
+            values ($1, $2, $3, $4, $5);
         "#,
             anime_id,
             input.sn,
             input.cover,
-            input.title,
             create_at,
             create_at,
         )
@@ -89,7 +88,6 @@ impl AnimeRepository {
             anime.id as "id: Hyphenated",
             anime.sn as "sn: u32",
             anime.cover as cover,
-            title,
             anime.create_at as "create_at: DateTime<Local>",
             anime.update_at as "update_at: DateTime<Local>",
             series.name as series_name,
@@ -124,7 +122,6 @@ impl AnimeRepository {
                 let id = first.id.into_uuid();
                 let sn = first.sn;
                 let cover = first.cover.clone();
-                let title = first.title.clone();
                 let create_at = first.create_at;
                 let update_at = first.update_at;
 
@@ -148,7 +145,6 @@ impl AnimeRepository {
                     id,
                     sn,
                     cover,
-                    title,
 
                     series,
 
@@ -213,7 +209,6 @@ mod tests {
             .insert(CreateAnime {
                 sn: 3499,
                 cover: "https://example.com/anime-3499.jpg".to_owned(),
-                title: "测试动画一".to_owned(),
                 series: first_series,
             })
             .await?;
@@ -232,7 +227,6 @@ mod tests {
             .insert(CreateAnime {
                 sn: 20273,
                 cover: "https://example.com/anime-20273.jpg".to_owned(),
-                title: "测试动画二".to_owned(),
                 series: second_series,
             })
             .await?;
@@ -246,7 +240,6 @@ mod tests {
             .find(|anime| anime.sn == 3499)
             .expect("应该返回第一部动画");
         assert_eq!(first.cover, "https://example.com/anime-3499.jpg");
-        assert_eq!(first.title, "测试动画一");
         assert_eq!(first.series.len(), 2);
 
         let first_season = first.series.get("第一季").expect("应该返回第一季");
@@ -273,7 +266,6 @@ mod tests {
             .find(|anime| anime.sn == 20273)
             .expect("应该返回第二部动画");
         assert_eq!(second.cover, "https://example.com/anime-20273.jpg");
-        assert_eq!(second.title, "测试动画二");
         assert_eq!(second.series.len(), 1);
 
         let episodes = second.series.get("本篇").expect("应该返回本篇");

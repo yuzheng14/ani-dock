@@ -1,6 +1,20 @@
+use thiserror::Error;
 use tokio::fs;
 
-use crate::{constant::COOKIE_FILE_PATH, error::CookieError};
+use crate::constant::COOKIE_FILE_PATH;
+
+#[derive(Debug, Error)]
+pub enum CookieError {
+    #[error("文件操作失败：{desp}")]
+    IO {
+        desp: String,
+
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("could not find cookie file")]
+    NotFound,
+}
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Cookie(pub String);
@@ -20,18 +34,38 @@ impl Cookie {
 
     pub async fn write_cookie(&self) -> Result<(), CookieError> {
         if let Some(parent_path) = COOKIE_FILE_PATH.parent() {
-            fs::create_dir_all(parent_path).await?;
+            fs::create_dir_all(parent_path)
+                .await
+                .map_err(|source| CookieError::IO {
+                    desp: "创建 cookie 文件父级目录失败".into(),
+                    source,
+                })?;
         }
 
-        fs::write(COOKIE_FILE_PATH.as_path(), &self.0).await?;
+        fs::write(COOKIE_FILE_PATH.as_path(), &self.0)
+            .await
+            .map_err(|source| CookieError::IO {
+                desp: "写入 cookie 文件失败".into(),
+                source,
+            })?;
 
         Ok(())
     }
 
     pub async fn read_cookie() -> Result<Self, CookieError> {
-        match fs::try_exists(COOKIE_FILE_PATH.as_path()).await? {
+        match fs::try_exists(COOKIE_FILE_PATH.as_path())
+            .await
+            .map_err(|source| CookieError::IO {
+                desp: "判断 cookie 文件是否存在错误".into(),
+                source,
+            })? {
             true => {
-                let contents = fs::read_to_string(COOKIE_FILE_PATH.as_path()).await?;
+                let contents = fs::read_to_string(COOKIE_FILE_PATH.as_path())
+                    .await
+                    .map_err(|source| CookieError::IO {
+                        desp: "读取 cookie 文件发生错误".into(),
+                        source,
+                    })?;
 
                 Ok(Cookie(contents.trim_end_matches(['\r', '\n']).to_string()))
             }
@@ -129,7 +163,7 @@ mod test {
             .await
             .expect_err("writing a cookie to a directory should fail");
 
-        assert!(matches!(read_error, CookieError::IO(_)));
-        assert!(matches!(write_error, CookieError::IO(_)));
+        assert!(matches!(read_error, CookieError::IO { .. }));
+        assert!(matches!(write_error, CookieError::IO { .. }));
     }
 }

@@ -8,13 +8,20 @@ use crate::{
             EXTRA_FILTER_REGEX, FULL_EPISODE_REGEX, MIN_EPISODE_REGEX, SEASON_FILTER_REGEX,
             WHITESPACES_REGEX,
         },
-        error::EpisodeDetailBuildError,
         util::get_anime_video_result_from_sn,
     },
     constant::BANGUMI_DIR_PATH,
     request::RequestClient,
     util::santitize_path_segment,
 };
+
+#[derive(Debug, thiserror::Error)]
+pub enum EpisodeDetailBuildError {
+    #[error("requst error when build episode detail: {0}")]
+    Request(#[from] wreq::Error),
+    #[error("{0}")]
+    Plain(String),
+}
 
 type EpisodeDetailBuildResult<T = ()> = Result<T, EpisodeDetailBuildError>;
 
@@ -30,7 +37,7 @@ impl EpisodeDetail {
         sn: u32,
         request_client: Arc<RequestClient>,
     ) -> EpisodeDetailBuildResult<EpisodeDetail> {
-        let video = get_anime_video_result_from_sn(sn, request_client)
+        let video = get_anime_video_result_from_sn(sn, &request_client)
             .await?
             .map_err(|err| {
                 EpisodeDetailBuildError::Plain(format!("request episode sn={sn} info error: {err}"))

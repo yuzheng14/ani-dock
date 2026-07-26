@@ -20,7 +20,8 @@ use url::Url;
 use wreq::header::REFERER;
 
 use crate::{
-    anime::{episode_detail::EpisodeDetail, error::AnimeDownloadError},
+    Episode,
+    anime::episode_detail::{EpisodeDetail, EpisodeDetailBuildError},
     config::Config,
     constant::{ORIGIN, TMP_DIR_PATH},
     device_id::DeviceId,
@@ -34,53 +35,112 @@ use crate::{
     util::{get_referer, random_string},
 };
 
-#[derive(Debug, Clone)]
-pub struct Episode {
-    /// images of current episode, maybe usefull(?)
-    cover: String,
-    /// number of this episode,
-    ///
-    /// examples: 1, 2, 3, 4, 5, ...
-    episode: u32,
-    /// sn of this episode
-    sn: u32,
+// TODO listen cookie jar change, save to config file
+pub struct EpisodeDownloader {
     request_client: Arc<RequestClient>,
-    // if download concurrently, this should rewrite to RwLock, but current it download one episode
-    // at same time
     config: Arc<Mutex<Config>>,
-    /// id of current device used by bahumut for identification
     device_id: DeviceId,
 }
 
-impl PartialEq for Episode {
-    fn eq(&self, other: &Self) -> bool {
-        self.cover == other.cover && self.episode == other.episode && self.sn == other.sn
+#[derive(Debug, thiserror::Error)]
+pub enum EpisodeDownloadError {
+    #[error("解析 URL 失败: {0}")]
+    Url(#[from] url::ParseError),
+
+    #[error("HTTP 请求失败: {0}")]
+    Http(#[from] wreq::Error),
+
+    #[error("文件系统操作失败: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("FFmpeg 执行失败: {0}")]
+    Ffmpeg(#[from] FFmpegError),
+
+    #[error("读取剧集信息失败: {0}")]
+    EpisodeDetail(#[from] EpisodeDetailBuildError),
+
+    #[error("用户权限校验失败: {0}")]
+    Permission(#[from] TokenError),
+
+    #[error("解析播放列表失败: {0}")]
+    M3u8Parse(nom::error::Error<String>),
+
+    #[error("设备 ID 不存在")]
+    DeviceIdMissing,
+
+    #[error("已设置仅限 VIP，但当前账号不是 VIP")]
+    VipRequired,
+
+    #[error("等待广告结束超时")]
+    AdsTimeout,
+
+    #[error("没有符合要求的分辨率，可用分辨率: {available:?}")]
+    ResolutionUnavailable { available: Vec<u64> },
+
+    #[error("动画疯接口返回错误: {0}")]
+    Api(String),
+
+    #[error("路径解析错误：{0}")]
+    Path(String),
+
+    #[error("播放清单解析错误：{0}")]
+    PlaylistParseError(String),
+}
+
+impl From<nom::error::Error<&[u8]>> for EpisodeDownloadError {
+    fn from(value: nom::error::Error<&[u8]>) -> Self {
+        Self::M3u8Parse(nom::error::Error::new(
+            String::from_utf8_lossy(value.input).into_owned(),
+            value.code,
+        ))
     }
 }
 
-impl Eq for Episode {}
+pub type EpisodeDownloadResult<T = ()> = Result<T, EpisodeDownloadError>;
 
-impl Episode {
+impl EpisodeDownloader {
     pub fn new(
-        cover: impl Into<String>,
-        episode: u32,
-        sn: u32,
         request_client: Arc<RequestClient>,
         config: Arc<Mutex<Config>>,
         device_id: DeviceId,
     ) -> Self {
         Self {
-            cover: cover.into(),
-            episode,
-            sn,
             request_client,
             config,
             device_id,
         }
     }
+    pub async fn download(&self, episode: &Episode) -> EpisodeDownloadResult {
+        let (sn, episode, cover) = episode.clone().into_parts();
+        let inner_downloader = InnerDownloader {
+            sn,
+            cover,
+            episode,
 
+            request_client: self.request_client.clone(),
+            config: self.config.clone(),
+            device_id: self.device_id.clone(),
+        };
+
+        inner_downloader.download().await?;
+
+        Ok(())
+    }
+}
+
+struct InnerDownloader {
+    request_client: Arc<RequestClient>,
+    config: Arc<Mutex<Config>>,
+    device_id: DeviceId,
+
+    cover: String,
+    episode: u32,
+    sn: u32,
+}
+
+impl InnerDownloader {
     #[tracing::instrument(skip(self))]
-    pub async fn download(&self) -> AnimeDownloadResult {
+    async fn download(&self) -> EpisodeDownloadResult {
         if !FFmpeg::exist().await? {
             return Err(FFmpegError::FFmpegNotExist.into());
         }
@@ -99,7 +159,7 @@ impl Episode {
 
         if !token.vip() {
             if self.config.lock().unwrap().only_use_vip {
-                return Err(AnimeDownloadError::SetOnlyVipButNot);
+                return Err(EpisodeDownloadError::VipRequired);
             }
 
             tracing::info!(
@@ -143,6 +203,11 @@ impl Episode {
             .await?;
 
         let (_, master_pl) = parse_master_playlist(&master_pl_bytes).finish()?;
+        if master_pl.variants.is_empty() {
+            return Err(EpisodeDownloadError::PlaylistParseError(
+                "m3u8 资源单中没有任何清晰度".into(),
+            ));
+        }
         tracing::debug!("parsed master_pl");
 
         let episode_detail = EpisodeDetail::from_sn(self.sn, self.request_client.clone()).await?;
@@ -203,7 +268,7 @@ impl Episode {
 
                     file.flush().await?;
 
-                    Ok::<(), AnimeDownloadError>(())
+                    Ok::<(), EpisodeDownloadError>(())
                 }),
         )
         .await?;
@@ -234,7 +299,7 @@ impl Episode {
 
                 file.flush().await?;
 
-                Ok::<(), AnimeDownloadError>(())
+                Ok::<(), EpisodeDownloadError>(())
             })
             .buffer_unordered(multi_downloading_segment)
             .inspect_ok(|_| {
@@ -250,10 +315,9 @@ impl Episode {
             tmp_dir_path
                 .join("manifest.m3u8")
                 .to_str()
-                .ok_or(AnimeDownloadError::Plain(format!(
-                    "路径存在问题 {}",
-                    tmp_dir_path.display()
-                )))?,
+                .ok_or(EpisodeDownloadError::Path(
+                    tmp_dir_path.display().to_string(),
+                ))?,
             tmp_dir_path.join(&file_name).to_string_lossy().into_owned(),
         )
         .await?;
@@ -268,12 +332,8 @@ impl Episode {
 
         Ok(())
     }
-}
 
-type AnimeDownloadResult<T = ()> = Result<T, AnimeDownloadError>;
-
-impl Episode {
-    async fn get_device_id(&self) -> AnimeDownloadResult {
+    async fn get_device_id(&self) -> EpisodeDownloadResult {
         let mut url = Url::parse(ORIGIN)?;
         url.set_path("ajax/getdeviceid.php");
         if let Some(device_id) = self.device_id.get_cloned() {
@@ -295,7 +355,7 @@ impl Episode {
     }
 
     /// if it is called before add, it should add adId, otherwise not
-    async fn gain_access(&self, add_ad_id: bool) -> AnimeDownloadResult<Token> {
+    async fn gain_access(&self, add_ad_id: bool) -> EpisodeDownloadResult<Token> {
         let mut url = Url::parse(ORIGIN)?;
         url.set_path("ajax/token.php");
         {
@@ -309,7 +369,7 @@ impl Episode {
                     "device",
                     self.device_id
                         .get_cloned()
-                        .ok_or(AnimeDownloadError::DeviceIdDidNotExist)?
+                        .ok_or(EpisodeDownloadError::DeviceIdMissing)?
                         .as_str(),
                 )
                 .append_pair("hash", &random_string(12));
@@ -343,7 +403,7 @@ impl Episode {
         Ok(token)
     }
 
-    async fn unlock(&self, ttl: Option<u32>) -> AnimeDownloadResult {
+    async fn unlock(&self, ttl: Option<u32>) -> EpisodeDownloadResult {
         let ttl = ttl.unwrap_or(0);
 
         let url = format!("{ORIGIN}/ajax/unlock.php?sn={}&ttl={ttl}", self.sn);
@@ -357,13 +417,13 @@ impl Episode {
         Ok(())
     }
 
-    async fn check_lock(&self) -> AnimeDownloadResult {
+    async fn check_lock(&self) -> EpisodeDownloadResult {
         let url = format!(
             "{ORIGIN}/ajax/checklock.php?device={}&sn={}",
             {
                 self.device_id
                     .get_cloned()
-                    .ok_or(AnimeDownloadError::DeviceIdDidNotExist)?
+                    .ok_or(EpisodeDownloadError::DeviceIdMissing)?
             },
             self.sn
         );
@@ -378,7 +438,7 @@ impl Episode {
         Ok(())
     }
 
-    async fn start_ad(&self) -> AnimeDownloadResult {
+    async fn start_ad(&self) -> EpisodeDownloadResult {
         // TODO s=194699 is ad's id, real logic will rotate this
         let url = format!("{ORIGIN}/ajax/videoCastcishu.php?sn={}&s=194699", self.sn);
 
@@ -392,7 +452,7 @@ impl Episode {
         Ok(())
     }
 
-    async fn skip_ad(&self) -> AnimeDownloadResult {
+    async fn skip_ad(&self) -> EpisodeDownloadResult {
         let url = format!(
             "{ORIGIN}/ajax/videoCastcishu.php?sn={}&s=194699&ad=end",
             self.sn
@@ -408,7 +468,7 @@ impl Episode {
         Ok(())
     }
 
-    async fn video_start(&self) -> AnimeDownloadResult {
+    async fn video_start(&self) -> EpisodeDownloadResult {
         let url = format!("{ORIGIN}/ajax/videoStart.php?sn={}", self.sn);
 
         self.request_client
@@ -421,7 +481,7 @@ impl Episode {
         Ok(())
     }
 
-    async fn check_no_ad(&self) -> AnimeDownloadResult {
+    async fn check_no_ad(&self) -> EpisodeDownloadResult {
         for _ in 0..10 {
             let token = self.gain_access(false).await?;
 
@@ -436,10 +496,10 @@ impl Episode {
             return Ok(());
         }
 
-        Err(AnimeDownloadError::WaitAdsTimeout)
+        Err(EpisodeDownloadError::AdsTimeout)
     }
 
-    async fn get_playlist(&self) -> AnimeDownloadResult<PlaylistSrc> {
+    async fn get_playlist(&self) -> EpisodeDownloadResult<PlaylistSrc> {
         // FIXME it seems like using
         // https://api.gamer.com.tw/anime/v1/video_src.php?videoSn=49953&deviceid=0118ddf4664ceba5c04a12aec5025b4d7c93819911f881586a5a65f00630&deviceTypeUseCases=1
         // now
@@ -448,7 +508,7 @@ impl Episode {
             self.sn,
             self.device_id
                 .get_cloned()
-                .ok_or(AnimeDownloadError::DeviceIdDidNotExist)?
+                .ok_or(EpisodeDownloadError::DeviceIdMissing)?
         );
 
         let playlist = self
@@ -460,27 +520,29 @@ impl Episode {
             .error_for_status()?
             .json::<DirectDataResponseBody<PlaylistSrc, String>>()
             .await?
-            .into_result()?;
+            .into_result()
+            .map_err(EpisodeDownloadError::Api)?;
 
         Ok(playlist)
     }
 
-    fn get_media_variant(&self, master_pl: MasterPlaylist) -> AnimeDownloadResult<VariantStream> {
+    fn get_media_variant(&self, master_pl: MasterPlaylist) -> EpisodeDownloadResult<VariantStream> {
         let resolution_map = master_pl
             .variants
             .into_iter()
             .map(|variant| {
-                Ok::<(u64, VariantStream), AnimeDownloadError>((
+                Ok::<(u64, VariantStream), EpisodeDownloadError>((
                     variant
                         .resolution
-                        .ok_or(AnimeDownloadError::Plain(
-                            "include variant without resolution: \n{variant:#?}".to_string(),
-                        ))?
+                        .ok_or(EpisodeDownloadError::PlaylistParseError(format!(
+                            "存在无法解析清晰度的变体：{:?}",
+                            variant
+                        )))?
                         .height,
                     variant,
                 ))
             })
-            .collect::<AnimeDownloadResult<IndexMap<u64, VariantStream>>>()?;
+            .collect::<EpisodeDownloadResult<IndexMap<u64, VariantStream>>>()?;
 
         let select_resolution = { self.config.lock().unwrap().download_resolution.get_height() };
         let variant = resolution_map.get(&select_resolution);
@@ -488,13 +550,9 @@ impl Episode {
 
         let lock_resolution = { self.config.lock().unwrap().lock_resolution };
         if lock_resolution && selected.is_none() {
-            return Err(AnimeDownloadError::Plain(format!(
-                "there is no selected resolution, and locked resolution. available resolutions: {:?}",
-                resolution_map
-                    .keys()
-                    .map(|k| k.to_owned())
-                    .collect::<Vec<u64>>()
-            )));
+            return Err(EpisodeDownloadError::ResolutionUnavailable {
+                available: resolution_map.keys().map(ToOwned::to_owned).collect(),
+            });
         }
         let variant = variant.unwrap_or_else(|| {
             let mut closest_vec = resolution_map
@@ -516,7 +574,7 @@ impl Episode {
     async fn get_media_playlist(
         &self,
         pl_src: &Url,
-    ) -> AnimeDownloadResult<(Bytes, MediaPlaylist)> {
+    ) -> EpisodeDownloadResult<(Bytes, MediaPlaylist)> {
         let playlist_bytes = self
             .request_client
             .get(pl_src, true)

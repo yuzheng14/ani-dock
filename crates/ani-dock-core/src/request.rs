@@ -1,5 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
+use thiserror::Error;
 use wreq::{
     Client, IntoUrl, RequestBuilder, Url, cookie,
     header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, ORIGIN},
@@ -10,7 +11,6 @@ use crate::{
     config::Config,
     constant::{self},
     cookie::Cookie,
-    error::RequestError,
 };
 
 pub(crate) mod anime_video;
@@ -18,6 +18,14 @@ pub(crate) mod common;
 pub(crate) mod device_id;
 pub(crate) mod playlist;
 pub(crate) mod token;
+
+#[derive(Debug, Error)]
+pub enum RequestError {
+    #[error("构建请求客户端失败：{0}")]
+    BuildClient(#[from] wreq::Error),
+    #[error("解析 url 失败：{0}")]
+    UrlParseError(#[from] url::ParseError),
+}
 
 #[derive(Debug)]
 pub struct RequestClient {
