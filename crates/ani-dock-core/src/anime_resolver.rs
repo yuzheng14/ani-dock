@@ -15,6 +15,7 @@ pub enum AnimeResolveError {
 
 pub type AnimeResolveResult<T = ()> = Result<T, AnimeResolveError>;
 
+#[derive(Debug)]
 pub struct AnimeResolver {
     request_client: Arc<RequestClient>,
 }

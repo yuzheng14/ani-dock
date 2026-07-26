@@ -4,6 +4,7 @@ members = ["crates/*", "tests/e2e"]
 
 [workspace.dependencies]
 ani-dock-core = { path = "./crates/ani-dock-core/" }
+ani-dock-db = { path = "./crates/ani-dock-db/" }
 axum = "0.8.9"
 chrono = "0.4.45"
 futures = "0.3.33"

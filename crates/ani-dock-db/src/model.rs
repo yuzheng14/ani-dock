@@ -1,7 +1,9 @@
 use chrono::{DateTime, Local};
 use indexmap::IndexMap;
+use serde::Serialize;
 use uuid::Uuid;
 
+#[derive(Debug, Serialize)]
 pub struct Anime {
     pub id: Uuid,
     pub sn: u32,
@@ -13,6 +15,7 @@ pub struct Anime {
     pub update_at: DateTime<Local>,
 }
 
+#[derive(Debug, Serialize)]
 pub struct Episode {
     pub id: Uuid,
     pub sn: u32,

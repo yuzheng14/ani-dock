@@ -5,8 +5,17 @@ edition = "2024"
 
 [dependencies]
 ani-dock-core = { workspace = true }
-chrono.workspace = true
+chrono = { workspace = true, features = ["serde"] }
 indexmap.workspace = true
-sqlx = { workspace = true, features = ["chrono", "runtime-tokio", "sqlite", "uuid"] }
+serde.workspace = true
+sqlx = {
+  workspace = true,
+  features = [
+    "chrono",
+    "runtime-tokio",
+    "sqlite",
+    "uuid",
+  ]
+}
 tokio = { workspace = true }
-uuid = { workspace = true, features = ["v7"] }
+uuid = { workspace = true, features = ["serde", "v7"] }

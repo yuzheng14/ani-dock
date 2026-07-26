@@ -36,6 +36,7 @@ use crate::{
 };
 
 // TODO listen cookie jar change, save to config file
+#[derive(Debug)]
 pub struct EpisodeDownloader {
     request_client: Arc<RequestClient>,
     config: Arc<Mutex<Config>>,

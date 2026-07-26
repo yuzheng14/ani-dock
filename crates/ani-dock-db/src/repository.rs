@@ -8,8 +8,9 @@ use crate::{
     model::{Anime, Episode},
 };
 
-type DbResult<T = ()> = Result<T, sqlx::Error>;
+pub type DbResult<T = ()> = Result<T, sqlx::Error>;
 
+#[derive(Debug, Clone)]
 pub struct AnimeRepository {
     pool: SqlitePool,
 }

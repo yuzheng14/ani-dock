@@ -6,7 +6,7 @@ use sqlx::{
 use tokio::fs;
 
 mod input;
-mod model;
+pub mod model;
 pub mod repository;
 
 pub async fn ensure_db_dir_exist() -> Result<(), std::io::Error> {

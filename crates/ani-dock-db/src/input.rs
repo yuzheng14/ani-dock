@@ -1,6 +1,7 @@
-use ani_dock_core::Anime;
+use ani_dock_core::{Anime, Episode};
 use indexmap::IndexMap;
 
+/// same as ani_dock_core::Anime, but pub all fields
 pub struct CreateAnime {
     pub sn: u32,
     pub cover: String,
@@ -8,6 +9,7 @@ pub struct CreateAnime {
     pub series: IndexMap<String, Vec<CreateEpisode>>,
 }
 
+/// same ani_dock_core::Episode, but pub all fileds
 pub struct CreateEpisode {
     pub sn: u32,
     pub cover: String,
@@ -23,19 +25,16 @@ impl From<Anime> for CreateAnime {
 
             series: series
                 .into_iter()
-                .map(|(name, episodes)| {
-                    (
-                        name,
-                        episodes
-                            .into_iter()
-                            .map(|e| {
-                                let (sn, episode, cover) = e.into_parts();
-                                CreateEpisode { sn, cover, episode }
-                            })
-                            .collect(),
-                    )
-                })
+                .map(|(name, episodes)| (name, episodes.into_iter().map(Into::into).collect()))
                 .collect(),
         }
+    }
+}
+
+impl From<Episode> for CreateEpisode {
+    fn from(value: Episode) -> Self {
+        let (sn, episode, cover) = value.into_parts();
+
+        Self { sn, cover, episode }
     }
 }

@@ -79,6 +79,7 @@ dependencies = [
  "ani-dock-core",
  "chrono",
  "indexmap",
+ "serde",
  "sqlx",
  "tokio",
  "uuid",
@@ -88,10 +89,17 @@ dependencies = [
 name = "ani-dock-server"
 version = "0.1.0"
 dependencies = [
+ "ani-dock-core",
+ "ani-dock-db",
  "axum",
+ "chrono",
+ "serde",
+ "sqlx",
+ "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -366,6 +374,7 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
+ "serde",
  "wasm-bindgen",
  "windows-link 0.2.1",
 ]
@@ -2779,6 +2788,7 @@ checksum = "bf3923a6f5c4c6382e0b653c4117f48d631ea17f38ed86e2a828e6f7412f5239"
 dependencies = [
  "getrandom 0.4.3",
  "js-sys",
+ "serde_core",
  "wasm-bindgen",
 ]
 
