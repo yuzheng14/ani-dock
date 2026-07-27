@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use ani_dock_core::{AnimeResolver, EpisodeDownloader};
-use ani_dock_db::repository::AnimeRepository;
+use ani_dock_db::repository::{AnimeRepository, EpisodeRepository};
 use axum::{Router, routing::get};
 
 use crate::router::{
@@ -10,11 +10,13 @@ use crate::router::{
 };
 
 mod anime;
+mod episode;
 mod health;
 
 #[derive(Debug, Clone)]
 pub struct DbRepository {
     pub anime: AnimeRepository,
+    pub episode: EpisodeRepository,
 }
 
 #[derive(Debug, Clone)]

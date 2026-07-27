@@ -1,7 +1,10 @@
 use std::sync::{Arc, Mutex};
 
 use ani_dock_core::{AnimeResolver, Config, Cookie, DeviceId, EpisodeDownloader, RequestClient};
-use ani_dock_db::{get_conn_pool, repository::AnimeRepository};
+use ani_dock_db::{
+    get_conn_pool,
+    repository::{AnimeRepository, EpisodeRepository},
+};
 use ani_dock_server::router::{AppState, DbRepository, get_app_router};
 use axum::serve;
 use tracing_subscriber::EnvFilter;
@@ -27,7 +30,8 @@ async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
 
     let state = AppState {
         db: DbRepository {
-            anime: AnimeRepository::new(pool),
+            anime: AnimeRepository::new(pool.clone()),
+            episode: EpisodeRepository::new(pool.clone()),
         },
         resolver,
         downloader,

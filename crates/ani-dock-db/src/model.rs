@@ -25,3 +25,13 @@ pub struct Episode {
     pub create_at: DateTime<Local>,
     pub update_at: DateTime<Local>,
 }
+
+impl From<Episode> for ani_dock_core::Episode {
+    fn from(value: Episode) -> Self {
+        let Episode {
+            sn, episode, cover, ..
+        } = value;
+
+        Self::new(sn, episode, cover)
+    }
+}

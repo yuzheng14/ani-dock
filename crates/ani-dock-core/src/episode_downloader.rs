@@ -112,10 +112,10 @@ impl EpisodeDownloader {
         }
     }
     pub async fn download(&self, episode: &Episode) -> EpisodeDownloadResult {
-        let (sn, episode, cover) = episode.clone().into_parts();
+        let (sn, episode, _) = episode.clone().into_parts();
         let inner_downloader = InnerDownloader {
             sn,
-            cover,
+            // cover,
             episode,
 
             request_client: self.request_client.clone(),
@@ -134,7 +134,7 @@ struct InnerDownloader {
     config: Arc<Mutex<Config>>,
     device_id: DeviceId,
 
-    cover: String,
+    // cover: String,
     episode: u32,
     sn: u32,
 }

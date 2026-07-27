@@ -93,6 +93,8 @@ dependencies = [
  "ani-dock-db",
  "axum",
  "chrono",
+ "futures",
+ "indexmap",
  "serde",
  "sqlx",
  "thiserror",

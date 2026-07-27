@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 pub mod router;
+pub mod service;
 
 #[derive(Debug, Error)]
 pub enum ApiError {
@@ -11,6 +12,8 @@ pub enum ApiError {
     Db(#[from] sqlx::Error),
     #[error("解析动画发生错误：{0}")]
     ResolveAnimeError(#[from] AnimeResolveError),
+    #[error("未找到当前剧集，可能是未解析动画，剧集 sn 为 {0}")]
+    EpisodeNotFound(u32),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -18,6 +21,7 @@ pub enum ApiError {
 pub enum ErrorCode {
     DbError,
     ResolveAnimeError,
+    EpisodeNotFound,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -27,6 +31,8 @@ pub struct ErrorBody {
 }
 
 pub type ApiResult<T> = Result<T, ApiError>;
+pub type CoreEpisode = ani_dock_core::Episode;
+pub type CoreAnime = ani_dock_core::Anime;
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
@@ -44,6 +50,14 @@ impl IntoResponse for ApiError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorBody {
                     code: ErrorCode::ResolveAnimeError,
+                    message: self.to_string(),
+                }),
+            )
+                .into_response(),
+            Self::EpisodeNotFound(_) => (
+                StatusCode::NOT_FOUND,
+                Json(ErrorBody {
+                    code: ErrorCode::EpisodeNotFound,
                     message: self.to_string(),
                 }),
             )

@@ -25,6 +25,7 @@ pub async fn import_anime(
 ) -> ApiResult<StatusCode> {
     let anime = state.resolver.from_episode_sn(req.sn).await?;
 
+    // TODO 先删除再插入，这样就可以实现更新了。当前实现会因为 sn 唯一而报错
     state.db.anime.insert(anime.into()).await?;
 
     Ok(StatusCode::CREATED)
