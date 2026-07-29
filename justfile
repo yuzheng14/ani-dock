@@ -12,3 +12,12 @@ check:
 
 test-e2e:
   RUST_LOG=ani_dock_core=debug cargo nextest run -p e2e --profile e2e --no-capture
+
+renew-git-hook:
+  # cp -p .git-hooks/* .git/hooks/
+  git config --local core.hooksPath .git-hooks
+
+@setup: renew-git-hook
+  typos --version || echo "请使用 brew install typos-cli 安装 typos 用于拼写检查"
+  tombi --version || echo "请使用 brew install tombi 安装 tombi 用于 toml 文件格式化"
+
