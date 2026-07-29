@@ -16,7 +16,9 @@ pub use anime_resolver::{AnimeResolveError, AnimeResolver};
 pub use config::{Config, ConfigError};
 pub use cookie::{Cookie, CookieError};
 pub use device_id::DeviceId;
-pub use episode_downloader::{EpisodeDownloadError, EpisodeDownloader};
+pub use episode_downloader::{
+    DownloadStatusNotifier, EpisodeDownloadError, EpisodeDownloadEvent, EpisodeDownloader,
+};
 pub use model::{anime::Anime, episode::Episode};
 pub use request::{RequestClient, RequestError};
 

@@ -3,7 +3,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use ani_dock_core::{AnimeResolver, Config, Cookie, DeviceId, EpisodeDownloader, RequestClient};
+use ani_dock_core::{
+    AnimeResolver, Config, Cookie, DeviceId, DownloadStatusNotifier, EpisodeDownloader,
+    RequestClient,
+};
 use tokio::fs;
 
 #[tokio::test]
@@ -23,7 +26,10 @@ async fn download_3499() -> Result<(), Box<dyn Error>> {
     let anime = resolver.from_episode_sn(3499).await?;
 
     downloader
-        .download(anime.series().first().unwrap().1.first().unwrap())
+        .download(
+            anime.series().first().unwrap().1.first().unwrap(),
+            DownloadStatusNotifier::default(),
+        )
         .await?;
 
     Ok(())

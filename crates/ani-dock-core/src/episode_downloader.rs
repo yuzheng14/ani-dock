@@ -11,6 +11,7 @@ use m3u8_rs::{
     MasterPlaylist, MediaPlaylist, VariantStream, parse_master_playlist, parse_media_playlist,
 };
 use nom::Finish;
+use serde::Serialize;
 use tokio::{
     fs::{self},
     io::AsyncWriteExt,
@@ -34,6 +35,40 @@ use crate::{
     },
     util::{get_referer, random_string},
 };
+
+#[derive(Clone)]
+pub struct DownloadStatusNotifier {
+    callback: Arc<dyn Fn(EpisodeDownloadEvent) + Send + Sync>,
+}
+
+impl std::fmt::Debug for DownloadStatusNotifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DownloadStatusNotifier")
+            .field("callback", &std::any::type_name_of_val(&self.callback))
+            .finish()
+    }
+}
+
+impl DownloadStatusNotifier {
+    pub fn new<F>(callback: F) -> Self
+    where
+        F: Fn(EpisodeDownloadEvent) + Send + Sync + 'static,
+    {
+        Self {
+            callback: Arc::new(callback),
+        }
+    }
+
+    pub fn notify(&self, status: EpisodeDownloadEvent) {
+        (self.callback)(status)
+    }
+}
+
+impl Default for DownloadStatusNotifier {
+    fn default() -> Self {
+        Self::new(|_| {})
+    }
+}
 
 // TODO listen cookie jar change, save to config file
 #[derive(Debug)]
@@ -111,7 +146,11 @@ impl EpisodeDownloader {
             device_id,
         }
     }
-    pub async fn download(&self, episode: &Episode) -> EpisodeDownloadResult {
+    pub async fn download(
+        &self,
+        episode: &Episode,
+        notifier: DownloadStatusNotifier,
+    ) -> EpisodeDownloadResult {
         let (sn, episode, _) = episode.clone().into_parts();
         let inner_downloader = InnerDownloader {
             sn,
@@ -121,6 +160,8 @@ impl EpisodeDownloader {
             request_client: self.request_client.clone(),
             config: self.config.clone(),
             device_id: self.device_id.clone(),
+
+            notifier,
         };
 
         inner_downloader.download().await?;
@@ -137,11 +178,14 @@ struct InnerDownloader {
     // cover: String,
     episode: u32,
     sn: u32,
+
+    notifier: DownloadStatusNotifier,
 }
 
 impl InnerDownloader {
     #[tracing::instrument(skip(self))]
     async fn download(&self) -> EpisodeDownloadResult {
+        self.notifier.notify(EpisodeDownloadEvent::Preparing);
         if !FFmpeg::exist().await? {
             return Err(FFmpegError::FFmpegNotExist.into());
         }
@@ -171,6 +215,7 @@ impl InnerDownloader {
 
             self.start_ad().await?;
             tracing::debug!("start waiting ad");
+            self.notifier.notify(EpisodeDownloadEvent::WaitingForAds);
             let ads_time = { self.config.lock().unwrap().ads_time as u64 };
             time::sleep(Duration::from_secs(ads_time)).await;
             tracing::debug!("finish waiting, skip ad");
@@ -185,6 +230,8 @@ impl InnerDownloader {
         self.check_no_ad().await?;
         tracing::debug!("check no ad complete");
 
+        self.notifier
+            .notify(EpisodeDownloadEvent::ResolveMediaResource);
         // FIXME it seems like that ani gamer doesn't use this api now. detailed api url is inside
         // this method
         let playlist = self.get_playlist().await?;
@@ -282,6 +329,11 @@ impl InnerDownloader {
         let multi_downloading_segment = { self.config.lock().unwrap().multi_downloading_segment };
         let completed = Arc::new(AtomicUsize::new(0));
         let total = media_pl.segments.len();
+        self.notifier
+            .notify(EpisodeDownloadEvent::DownloadingSegments {
+                completed: 0,
+                total,
+            });
         stream::iter(&media_pl.segments)
             .map(|segment| async {
                 let mut resp = self
@@ -307,11 +359,18 @@ impl InnerDownloader {
                 let current = completed.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
 
                 tracing::debug!(current = current, total = total, "downloading");
+
+                self.notifier
+                    .notify(EpisodeDownloadEvent::DownloadingSegments {
+                        completed: current,
+                        total,
+                    })
             })
             .try_collect::<Vec<()>>()
             .await?;
         tracing::debug!("m3u8 chunks downloaded");
 
+        self.notifier.notify(EpisodeDownloadEvent::Merging);
         FFmpeg::merge_m3u8(
             tmp_dir_path
                 .join("manifest.m3u8")
@@ -324,12 +383,15 @@ impl InnerDownloader {
         .await?;
         tracing::debug!("merged m3u8 to mp4");
 
+        self.notifier.notify(EpisodeDownloadEvent::Finalizing);
         fs::copy(tmp_dir_path.join(&file_name), file_path).await?;
         fs::remove_file(tmp_dir_path.join(&file_name)).await?;
         tracing::debug!("moved file");
 
         fs::remove_dir_all(tmp_dir_path).await?;
         tracing::debug!("removed tmp dir");
+
+        self.notifier.notify(EpisodeDownloadEvent::Completed);
 
         Ok(())
     }
@@ -590,6 +652,27 @@ impl InnerDownloader {
 
         Ok((playlist_bytes, media_pl))
     }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum EpisodeDownloadEvent {
+    /// 尚未开始，供上层使用，core 模块内不使用
+    Pending,
+    /// 准备阶段
+    Preparing,
+    /// 等待广告
+    WaitingForAds,
+    /// 解析媒体资源
+    ResolveMediaResource,
+    /// 下载分段资源
+    DownloadingSegments { completed: usize, total: usize },
+    /// ffmpeg 合并中
+    Merging,
+    /// 删除临时文件夹，移动文件等收尾操作
+    Finalizing,
+    /// 完成
+    Completed,
 }
 
 #[cfg(test)]
