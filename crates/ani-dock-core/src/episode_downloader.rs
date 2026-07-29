@@ -173,7 +173,7 @@ impl InnerDownloader {
             tracing::debug!("start waiting ad");
             let ads_time = { self.config.lock().unwrap().ads_time as u64 };
             time::sleep(Duration::from_secs(ads_time)).await;
-            tracing::debug!("finish wating, skip ad");
+            tracing::debug!("finish waiting, skip ad");
             self.skip_ad().await?;
             tracing::debug!("skip ad  complete");
         } else {
@@ -277,7 +277,7 @@ impl InnerDownloader {
 
         // write m3u8 playlist to file
         fs::write(tmp_dir_path.join("manifest.m3u8"), media_pl_bytes).await?;
-        tracing::debug!("writed m3u8 manifest");
+        tracing::debug!("wrote m3u8 manifest");
 
         let multi_downloading_segment = { self.config.lock().unwrap().multi_downloading_segment };
         let completed = Arc::new(AtomicUsize::new(0));

@@ -24,7 +24,7 @@ pub fn get_referer(sn: u32) -> String {
     format!("{ORIGIN}/animeVideo.php?sn={sn}")
 }
 
-pub fn santitize_path_segment(path: &str) -> String {
+pub fn sanitize_path_segment(path: &str) -> String {
     path.replace("|", "｜")
         .replace("?", "？")
         .replace("*", "＊")
@@ -67,17 +67,17 @@ mod test {
     }
 
     #[test]
-    fn santitize_path_segment_replaces_unsupported_characters() {
+    fn sanitize_path_segment_replaces_unsupported_characters() {
         assert_eq!(
-            santitize_path_segment(r#"a|b?c*d<e>f"g:h\i/j"#),
+            sanitize_path_segment(r#"a|b?c*d<e>f"g:h\i/j"#),
             "a｜b？c＊d＜e＞f＂g：h＼i／j"
         );
     }
 
     #[test]
-    fn santitize_path_segment_preserves_supported_characters() {
+    fn sanitize_path_segment_preserves_supported_characters() {
         let path_segment = "劇場版 關於我轉生變成史萊姆這檔事 [電影].mp4";
 
-        assert_eq!(santitize_path_segment(path_segment), path_segment);
+        assert_eq!(sanitize_path_segment(path_segment), path_segment);
     }
 }

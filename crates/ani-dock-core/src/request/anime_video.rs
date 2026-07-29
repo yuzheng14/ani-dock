@@ -30,7 +30,7 @@ pub struct Anime {
     /// cover image, aka. anime image
     cover: String,
     director: String,
-    /// key is numberic string. main series will usually be `0`.
+    /// key is numeric string. main series will usually be `0`.
     episodes: IndexMap<String, Vec<Episode>>,
     /// episode's title of current sn
     title: String,
@@ -57,7 +57,7 @@ impl Anime {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Episode {
-    /// images of current episode, maybe usefull(?)
+    /// images of current episode, maybe useful(?)
     cover: String,
     /// number of this episode,
     ///

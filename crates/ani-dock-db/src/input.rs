@@ -9,7 +9,7 @@ pub struct CreateAnime {
     pub series: IndexMap<String, Vec<CreateEpisode>>,
 }
 
-/// same ani_dock_core::Episode, but pub all fileds
+/// same ani_dock_core::Episode, but pub all fields
 pub struct CreateEpisode {
     pub sn: u32,
     pub cover: String,

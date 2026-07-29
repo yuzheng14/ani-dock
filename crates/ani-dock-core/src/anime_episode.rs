@@ -99,7 +99,7 @@ impl AnimeEpisode {
 
     /// Query css selector `.playing a` first.
     /// If not, then query using a strict regex.
-    /// If not, then qeury using a loose regex which match last
+    /// If not, then query using a loose regex which match last
     /// content inside `[]`.
     /// If not, then return 1.
     fn get_episode(root: &DomNode, title: &str) -> String {

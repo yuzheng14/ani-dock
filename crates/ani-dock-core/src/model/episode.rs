@@ -7,7 +7,7 @@ pub struct Episode {
     ///
     /// examples: 1, 2, 3, 4, 5, ...
     episode: u32,
-    /// images of current episode, maybe usefull(?)
+    /// images of current episode, maybe useful(?)
     cover: String,
 }
 

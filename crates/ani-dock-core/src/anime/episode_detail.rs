@@ -12,12 +12,12 @@ use crate::{
     },
     constant::BANGUMI_DIR_PATH,
     request::RequestClient,
-    util::santitize_path_segment,
+    util::sanitize_path_segment,
 };
 
 #[derive(Debug, thiserror::Error)]
 pub enum EpisodeDetailBuildError {
-    #[error("requst error when build episode detail: {0}")]
+    #[error("request error when build episode detail: {0}")]
     Request(#[from] wreq::Error),
     #[error("{0}")]
     Plain(String),
@@ -70,12 +70,12 @@ impl EpisodeDetail {
 
     pub fn bangumi_dir(&self) -> PathBuf {
         BANGUMI_DIR_PATH
-            .join(santitize_path_segment(&self.name))
-            .join(santitize_path_segment(&self.season))
+            .join(sanitize_path_segment(&self.name))
+            .join(sanitize_path_segment(&self.season))
     }
 
     pub fn get_filename(&self, resolution: u64) -> String {
-        santitize_path_segment(&format!(
+        sanitize_path_segment(&format!(
             "{}[{}][{}P].mp4",
             self.name, self.episode, resolution
         ))

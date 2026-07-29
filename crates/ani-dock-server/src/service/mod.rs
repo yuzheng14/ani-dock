@@ -7,14 +7,14 @@ use tokio::sync::Semaphore;
 
 use crate::CoreEpisode;
 
-pub struct DonwloadCounter {
+pub struct DownloadCounter {
     current: AtomicU32,
     total: u32,
 }
 
 pub enum DownloadState {
     Pending,
-    Downloading(DonwloadCounter),
+    Downloading(DownloadCounter),
     Downloaded,
 }
 
