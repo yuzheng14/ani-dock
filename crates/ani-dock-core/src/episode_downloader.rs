@@ -71,7 +71,7 @@ impl Default for DownloadStatusNotifier {
 }
 
 // TODO listen cookie jar change, save to config file
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EpisodeDownloader {
     request_client: Arc<RequestClient>,
     config: Arc<Mutex<Config>>,
@@ -121,6 +121,11 @@ pub enum EpisodeDownloadError {
 
     #[error("播放清单解析错误：{0}")]
     PlaylistParseError(String),
+
+    // TODO 删除，上层自定义错误类型
+    /// 供上层使用
+    #[error("获取下载器并发锁失败")]
+    AcquireSemaphore,
 }
 
 impl From<nom::error::Error<&[u8]>> for EpisodeDownloadError {
@@ -334,17 +339,19 @@ impl InnerDownloader {
                 completed: 0,
                 total,
             });
-        stream::iter(&media_pl.segments)
+        stream::iter(media_pl.segments)
             .map(|segment| async {
+                // make compiler happy
+                let uri = segment.uri;
                 let mut resp = self
                     .request_client
-                    .get(media_pl_src.join(segment.uri.deref())?, false)
+                    .get(media_pl_src.join(uri.deref())?, false)
                     .header(REFERER, get_referer(self.sn))
                     .send()
                     .await?
                     .error_for_status()?;
 
-                let mut file = fs::File::create(tmp_dir_path.join(segment.uri.deref())).await?;
+                let mut file = fs::File::create(tmp_dir_path.join(uri.deref())).await?;
 
                 while let Some(chunk) = resp.chunk().await? {
                     file.write_all(&chunk).await?
