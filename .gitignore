@@ -6,3 +6,6 @@ report.html
 
 /crates/ani-dock-db/schema.sqlite-shm
 /crates/ani-dock-db/schema.sqlite-wal
+
+node_modules
+.pnpm-store

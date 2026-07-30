@@ -1,0 +1,13 @@
+{
+  "name": "ani-gamer-pro",
+  "private": true,
+  "author": "yuzheng14",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "^11.9.0",
+      "onFail": "download"
+    }
+  },
+  "type": "module"
+}
