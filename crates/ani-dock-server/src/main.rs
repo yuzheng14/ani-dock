@@ -5,7 +5,10 @@ use ani_dock_db::{
     get_conn_pool,
     repository::{AnimeRepository, EpisodeRepository},
 };
-use ani_dock_server::router::{AppState, DbRepository, get_app_router};
+use ani_dock_server::{
+    router::{AppState, DbRepository, get_app_router},
+    service::{Downloader, Services},
+};
 use axum::serve;
 use tracing_subscriber::EnvFilter;
 
@@ -27,7 +30,7 @@ async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
 
     let resolver = Arc::new(AnimeResolver::new(request_client.clone()));
     // TODO use notifier to change status
-    let downloader = Arc::new(EpisodeDownloader::new(request_client, config, device_id));
+    let downloader = EpisodeDownloader::new(request_client, config, device_id);
 
     let state = AppState {
         db: DbRepository {
@@ -35,7 +38,9 @@ async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
             episode: EpisodeRepository::new(pool.clone()),
         },
         resolver,
-        downloader,
+        services: Services {
+            download: Downloader::new(downloader),
+        },
     };
 
     let app = get_app_router(state);

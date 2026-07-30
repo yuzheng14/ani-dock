@@ -399,6 +399,17 @@ mod test {
     }
 
     #[test]
+    fn disabled_default_download_mode_is_ignored() -> Result<(), Box<dyn Error>> {
+        let config: Config = toml::from_str("default_download_mode = \"all\"")?;
+        let serialized = toml::to_string(&config)?;
+
+        assert_eq!(config, Config::default());
+        assert!(!serialized.contains("default_download_mode"));
+
+        Ok(())
+    }
+
+    #[test]
     fn download_resolution_converts_to_string() {
         let cases = [
             (DownloadResolution::P360, "360p"),

@@ -684,10 +684,86 @@ pub enum EpisodeDownloadEvent {
 
 #[cfg(test)]
 mod m3u8_test {
-    use std::error::Error;
+    use std::{
+        error::Error,
+        sync::{Arc, Mutex},
+    };
 
     use m3u8_rs::{KeyMethod, Resolution};
+    use serde_json::json;
     use url::Url;
+
+    use super::{DownloadStatusNotifier, EpisodeDownloadEvent};
+
+    #[test]
+    fn cloned_download_status_notifiers_share_the_callback() {
+        let received = Arc::new(Mutex::new(Vec::new()));
+        let received_by_callback = received.clone();
+        let notifier = DownloadStatusNotifier::new(move |event| {
+            received_by_callback
+                .lock()
+                .unwrap()
+                .push(serde_json::to_value(event).unwrap());
+        });
+
+        notifier.notify(EpisodeDownloadEvent::Preparing);
+        notifier
+            .clone()
+            .notify(EpisodeDownloadEvent::DownloadingSegments {
+                completed: 2,
+                total: 5,
+            });
+
+        assert_eq!(
+            *received.lock().unwrap(),
+            vec![
+                json!("PREPARING"),
+                json!({
+                    "DOWNLOADING_SEGMENTS": {
+                        "completed": 2,
+                        "total": 5
+                    }
+                }),
+            ]
+        );
+    }
+
+    #[test]
+    fn episode_download_events_have_stable_json_shapes() -> Result<(), serde_json::Error> {
+        let cases = [
+            (EpisodeDownloadEvent::Pending, json!("PENDING")),
+            (EpisodeDownloadEvent::Preparing, json!("PREPARING")),
+            (
+                EpisodeDownloadEvent::WaitingForAds,
+                json!("WAITING_FOR_ADS"),
+            ),
+            (
+                EpisodeDownloadEvent::ResolveMediaResource,
+                json!("RESOLVE_MEDIA_RESOURCE"),
+            ),
+            (
+                EpisodeDownloadEvent::DownloadingSegments {
+                    completed: 3,
+                    total: 8,
+                },
+                json!({
+                    "DOWNLOADING_SEGMENTS": {
+                        "completed": 3,
+                        "total": 8
+                    }
+                }),
+            ),
+            (EpisodeDownloadEvent::Merging, json!("MERGING")),
+            (EpisodeDownloadEvent::Finalizing, json!("FINALIZING")),
+            (EpisodeDownloadEvent::Completed, json!("COMPLETED")),
+        ];
+
+        for (event, expected) in cases {
+            assert_eq!(serde_json::to_value(event)?, expected);
+        }
+
+        Ok(())
+    }
 
     #[test]
     fn m3u8_parse_master_playlist() -> Result<(), Box<dyn Error>> {

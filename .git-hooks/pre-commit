@@ -2,5 +2,6 @@
 
 set -e
 
+cargo fmt --check
 tombi fmt --check
 typos

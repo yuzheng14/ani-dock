@@ -19,7 +19,9 @@ pub async fn download(
         .map(|(sn, e)| e.ok_or(ApiError::EpisodeNotFound(sn)).map(Into::into))
         .collect::<Result<Vec<CoreEpisode>, ApiError>>()?;
 
-    todo!();
+    for episode in episodes {
+        state.services.download.schedule_download(episode);
+    }
 
     Ok(StatusCode::ACCEPTED)
 }
