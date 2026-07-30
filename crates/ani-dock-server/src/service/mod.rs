@@ -1,10 +1,13 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use ani_dock_core::{
     Config, DownloadStatusNotifier, EpisodeDownloadError, EpisodeDownloadEvent, EpisodeDownloader,
 };
 use indexmap::IndexMap;
-use tokio::sync::{Semaphore, mpsc};
+use tokio::{sync::Semaphore, time};
 
 use crate::CoreEpisode;
 
@@ -30,6 +33,7 @@ impl Downloader {
         }
     }
 
+    /// This only means download task has been scheduled, not completed
     pub fn schedule_download(&self, episode: CoreEpisode) {
         if self.state_map.lock().unwrap().contains_key(&episode.sn()) {
             return;
@@ -54,6 +58,8 @@ impl Downloader {
                 return;
             }
 
+            let cooldown = time::sleep(Duration::from_secs(24 * 60));
+
             let status_map = this.state_map.clone();
             let notifier = DownloadStatusNotifier::new(move |event| {
                 // tx_cloned.send(Ok(event)).unwrap();
@@ -67,6 +73,8 @@ impl Downloader {
                     .unwrap()
                     .insert(sn, Err(Arc::new(err)));
             }
+
+            cooldown.await;
         });
     }
 }

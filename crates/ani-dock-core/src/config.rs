@@ -165,8 +165,8 @@ pub struct Config {
     pub lock_resolution: bool,
     /// 是否只使用 VIP 账号下载
     pub only_use_vip: bool,
-    /// 默认下载模式，可选 latest 和 all，默认为 latest。
-    pub default_download_mode: DownloadMode,
+    /// /// 默认下载模式，可选 latest 和 all，默认为 latest。
+    /// pub default_download_mode: DownloadMode,
     /// 是否优先移动文件，而不是复制文件。如果跨设备/文件系统移动，可以设置为 false，
     /// 文件将会先复制到目标文件夹，再删除源文件。避免移动失败的问题，默认为 true。
     pub prefer_move: bool,
@@ -259,7 +259,7 @@ impl Default for Config {
             download_resolution: Default::default(),
             lock_resolution: Default::default(),
             only_use_vip: Default::default(),
-            default_download_mode: Default::default(),
+            // default_download_mode: Default::default(),
             prefer_move: true,
             // multi_thread: 1,
             multi_downloading_segment: 2,
@@ -490,7 +490,7 @@ mod test {
         let _config_file = TestConfigFile::new();
         let expected = Config {
             download_resolution: DownloadResolution::P720,
-            default_download_mode: DownloadMode::All,
+            // default_download_mode: DownloadMode::All,
             save_logs: false,
             ..Config::default()
         };
