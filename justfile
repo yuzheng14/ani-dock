@@ -29,7 +29,7 @@ prettier-check:
   pnpm -F frontend exec prettier --check .
 
 typecheck:
-  pnpm -F frontend exec tsc --noEmit
+  pnpm -F frontend exec tsc -b --noEmit
 
 lint:
   pnpm -F frontend exec oxlint --deny-warnings
