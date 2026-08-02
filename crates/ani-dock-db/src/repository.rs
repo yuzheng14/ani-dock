@@ -21,6 +21,7 @@ impl AnimeRepository {
     }
 
     pub async fn insert(&self, input: CreateAnime) -> DbResult {
+        // TODO save cover bytes
         let mut tx = self.pool.begin().await?;
 
         let anime_id = Uuid::now_v7().to_string();

@@ -2,10 +2,4 @@
 
 set -e
 
-cargo fmt --check
-tombi fmt --check
-typos
-
-just prettier-check
-just typecheck
-just lint
+just check

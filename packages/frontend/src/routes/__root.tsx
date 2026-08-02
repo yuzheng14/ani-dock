@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/sidebar'
 import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { HardDriveDownload, LibraryBig, Settings } from 'lucide-react'
 import type { CSSProperties } from 'react'
 
@@ -108,6 +109,7 @@ const RootLayout = () => (
       </SidebarInset>
     </SidebarProvider>
     <TanStackRouterDevtools />
+    <ReactQueryDevtools />
   </>
 )
 

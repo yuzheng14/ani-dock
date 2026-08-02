@@ -1,0 +1,20 @@
+download_resolution = "1080"
+lock_resolution = false
+only_use_vip = false
+default_download_mode = "latest"
+prefer_move = true
+multi_thread = 1
+multi_downloading_segment = 2
+segment_max_retry = 8
+ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0"
+use_mobile_api = false
+danmu = false
+danmu_ban_words = []
+ads_time = 25
+mobile_ads_time = 25
+save_logs = true
+quantity_of_logs = 7
+
+[internal.config_version]
+major = 1
+minor = 0

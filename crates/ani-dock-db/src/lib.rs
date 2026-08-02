@@ -27,8 +27,12 @@ pub async fn get_conn_pool() -> Result<Pool<Sqlite>, sqlx::Error> {
         .create_if_missing(true)
         .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
 
-    SqlitePoolOptions::new()
+    let pool = SqlitePoolOptions::new()
         .max_connections(5)
         .connect_with(conn_option)
-        .await
+        .await?;
+
+    sqlx::migrate!().run(&pool).await?;
+
+    Ok(pool)
 }
