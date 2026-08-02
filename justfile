@@ -20,7 +20,7 @@ nextest:
 
 # 从 rust 类型生成 ts 类型
 gen-type:
-  cargo nextest run export_bindings
+  cargo nextest run --ignore-default-filter export_bindings
   pnpx prettier --write packages/shared-type/types
 
 # 检查所有的 rust ts 检查，包含格式化 lint 单测

@@ -3,9 +3,9 @@ config-file-tests = { max-threads = 1 }
 sn-list-file-tests = { max-threads = 1 }
 cookie-file-tests = { max-threads = 1 }
 
-# not run e2e when run `cargo nextest run --workspace`
+# 默认不运行 e2e 和生成 TypeScript bindings 的测试
 [profile.default]
-default-filter = "not package(e2e)"
+default-filter = "not package(e2e) and not test(export_bindings)"
 
 [[profile.default.overrides]]
 filter = "test(config::test::)"
