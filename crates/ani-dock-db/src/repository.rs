@@ -27,10 +27,21 @@ impl AnimeRepository {
         let anime_id = Uuid::now_v7().to_string();
         let create_at = Local::now();
 
-        sqlx::query!(
+        let anime_id = sqlx::query_scalar!(
             r#"
-            INSERT INTO anime (id, sn, cover, name, create_at, update_at)
-            values ($1, $2, $3, $4, $5, $6);
+            INSERT INTO
+                anime(
+                    id,
+                    sn,
+                    cover,
+                    name,
+                    create_at,
+                    update_at
+                )
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT(sn)
+            DO UPDATE SET sn = anime.sn
+            RETURNING id;
         "#,
             anime_id,
             input.sn,
@@ -39,15 +50,25 @@ impl AnimeRepository {
             create_at,
             create_at,
         )
-        .execute(&mut *tx)
+        .fetch_one(&mut *tx)
         .await?;
 
         for (name, episodes) in &input.series {
             let series_id = Uuid::now_v7().to_string();
-            sqlx::query!(
+            let series_id = sqlx::query_scalar!(
                 r#"
-                INSERT INTO series (id, anime_id, name, create_at, update_at)
-                values ($1, $2, $3, $4, $5)
+                INSERT INTO
+                    series(
+                        id,
+                        anime_id,
+                        name,
+                        create_at,
+                        update_at
+                    )
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT(anime_id, name)
+                DO UPDATE SET name = series.name
+                RETURNING id;
             "#,
                 series_id,
                 anime_id,
@@ -55,7 +76,7 @@ impl AnimeRepository {
                 create_at,
                 create_at,
             )
-            .execute(&mut *tx)
+            .fetch_one(&mut *tx)
             .await?;
 
             for episode in episodes {
@@ -63,8 +84,19 @@ impl AnimeRepository {
 
                 sqlx::query!(
                     r#"
-                INSERT INTO episode (id, series_id, sn, cover, episode, create_at, update_at)
-                values ($1, $2, $3, $4, $5, $6, $7);
+                    INSERT INTO
+                        episode(
+                            id,
+                            series_id,
+                            sn,
+                            cover,
+                            episode,
+                            create_at,
+                            update_at
+                        )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    ON CONFLICT(sn)
+                    DO NOTHING;
                 "#,
                     episode_id,
                     series_id,
@@ -222,9 +254,7 @@ mod anime_repository_tests {
     }
 
     #[sqlx::test]
-    async fn insert_returns_unique_violation_when_anime_sn_already_exists(
-        pool: SqlitePool,
-    ) -> DbResult {
+    async fn insert_adds_new_series_when_anime_sn_already_exists(pool: SqlitePool) -> DbResult {
         let repository = AnimeRepository::new(pool);
 
         let mut first_series = IndexMap::new();
@@ -254,24 +284,27 @@ mod anime_repository_tests {
                 episode: 1,
             }],
         );
-        let error = repository
+        repository
             .insert(CreateAnime {
                 sn: 3499,
                 cover: "https://example.com/duplicate-anime-3499.jpg".to_owned(),
                 series: duplicate_series,
                 name: "進擊的巨人".to_owned(),
             })
-            .await
-            .expect_err("插入重复的动画 SN 应该失败");
-
-        assert!(matches!(
-            error,
-            sqlx::Error::Database(ref error) if error.is_unique_violation()
-        ));
+            .await?;
 
         let anime = repository.select_all().await?;
         assert_eq!(anime.len(), 1);
         assert_eq!(anime[0].cover, "https://example.com/anime-3499.jpg");
+        assert_eq!(anime[0].series.len(), 2);
+
+        let first_series = anime[0].series.get("第一季").expect("应该保留第一季");
+        assert_eq!(first_series.len(), 1);
+        assert_eq!(first_series[0].sn, 3499);
+
+        let second_series = anime[0].series.get("第二季").expect("应该添加第二季");
+        assert_eq!(second_series.len(), 1);
+        assert_eq!(second_series[0].sn, 50002);
 
         Ok(())
     }
@@ -437,7 +470,7 @@ mod episode_repository_tests {
     }
 
     #[sqlx::test]
-    async fn insert_returns_unique_violation_when_episode_sn_already_exists(
+    async fn insert_is_idempotent_and_adds_new_episode_to_existing_series(
         pool: SqlitePool,
     ) -> DbResult {
         let anime_repository = AnimeRepository::new(pool.clone());
@@ -463,33 +496,46 @@ mod episode_repository_tests {
 
         let mut duplicate_series = IndexMap::new();
         duplicate_series.insert(
-            "本篇".to_owned(),
-            vec![CreateEpisode {
-                sn: 3499,
-                cover: "https://example.com/duplicate-3499.jpg".to_owned(),
-                episode: 1,
-            }],
+            "第一季".to_owned(),
+            vec![
+                CreateEpisode {
+                    sn: 3499,
+                    cover: "https://example.com/duplicate-3499.jpg".to_owned(),
+                    episode: 1,
+                },
+                CreateEpisode {
+                    sn: 3500,
+                    cover: "https://example.com/3500.jpg".to_owned(),
+                    episode: 2,
+                },
+            ],
         );
-        let error = anime_repository
+        anime_repository
             .insert(CreateAnime {
-                sn: 20273,
-                cover: "https://example.com/anime-20273.jpg".to_owned(),
+                sn: 3499,
+                cover: "https://example.com/duplicate-anime-3499.jpg".to_owned(),
                 series: duplicate_series,
                 name: "進擊的巨人".to_owned(),
             })
-            .await
-            .expect_err("插入重复的剧集 SN 应该失败");
-
-        assert!(matches!(
-            error,
-            sqlx::Error::Database(ref error) if error.is_unique_violation()
-        ));
+            .await?;
 
         let episode = episode_repository
             .select(3499)
             .await?
             .expect("原有剧集不应该受到影响");
         assert_eq!(episode.cover, "https://example.com/3499.jpg");
+
+        let episode = episode_repository
+            .select(3500)
+            .await?
+            .expect("应该向已有系列添加新的剧集");
+        assert_eq!(episode.cover, "https://example.com/3500.jpg");
+        assert_eq!(episode.episode, 2);
+
+        let anime = anime_repository.select_all().await?;
+        assert_eq!(anime.len(), 1);
+        assert_eq!(anime[0].series.len(), 1);
+        assert_eq!(anime[0].series["第一季"].len(), 2);
 
         Ok(())
     }
