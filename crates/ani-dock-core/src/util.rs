@@ -1,8 +1,14 @@
 use std::sync::LazyLock;
 
 use rand::seq::IndexedRandom;
+use serde_json::Value;
+use wreq::header::REFERER;
 
-use crate::constant::ORIGIN;
+use crate::{
+    RequestClient,
+    constant::{API_ORIGIN, ORIGIN},
+    request::{anime_video::Video, common::CommonResponseBody},
+};
 
 static CHARS_VEC: LazyLock<Vec<char>> = LazyLock::new(|| {
     let chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -34,6 +40,23 @@ pub fn sanitize_path_segment(path: &str) -> String {
         .replace(":", "：")
         .replace("\\", "＼")
         .replace("/", "／")
+}
+
+pub async fn get_anime_video_result_from_sn(
+    sn: u32,
+    request_client: &RequestClient,
+) -> Result<Result<Video, Value>, wreq::Error> {
+    let url = format!("{API_ORIGIN}/anime/v1/video.php?videoSn={sn}");
+    let anime_video: CommonResponseBody<Video, Value> = request_client
+        .get(&url, false)
+        .header(REFERER, get_referer(sn))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+
+    Ok(anime_video.into_result())
 }
 
 #[cfg(test)]

@@ -9,14 +9,22 @@ pub struct Anime {
     series: IndexMap<String, Vec<Episode>>,
     /// cover image of this anime
     cover: String,
+    /// anime's name including season
+    name: String,
 }
 
 impl Anime {
-    pub fn new(sn: u32, series: IndexMap<String, Vec<Episode>>, cover: impl Into<String>) -> Self {
+    pub fn new(
+        sn: u32,
+        series: IndexMap<String, Vec<Episode>>,
+        cover: impl Into<String>,
+        name: impl Into<String>,
+    ) -> Self {
         Self {
             sn,
             series,
             cover: cover.into(),
+            name: name.into(),
         }
     }
 
@@ -32,8 +40,13 @@ impl Anime {
         &self.cover
     }
 
-    pub fn into_parts(self) -> (u32, IndexMap<String, Vec<Episode>>, String) {
-        let Self { sn, series, cover } = self;
-        (sn, series, cover)
+    pub fn into_parts(self) -> (u32, IndexMap<String, Vec<Episode>>, String, String) {
+        let Self {
+            sn,
+            series,
+            cover,
+            name,
+        } = self;
+        (sn, series, cover, name)
     }
 }

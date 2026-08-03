@@ -1,8 +1,12 @@
 use std::sync::Arc;
 
+use futures::future::try_join_all;
 use thiserror::Error;
 
-use crate::{Anime, Episode, RequestClient, anime::util::get_anime_video_result_from_sn};
+use crate::{
+    Anime, Episode, EpisodeDetail, RequestClient, error::EpisodeDetailBuildError,
+    util::get_anime_video_result_from_sn,
+};
 
 #[derive(Debug, Error)]
 pub enum AnimeResolveError {
@@ -11,6 +15,12 @@ pub enum AnimeResolveError {
 
     #[error("HTTP 请求失败: {0}")]
     Http(#[from] wreq::Error),
+
+    #[error("解析动画名或者系列名失败：{0}")]
+    ResolveAnimeNameOrSeriesName(#[from] EpisodeDetailBuildError),
+
+    #[error("非预期情况，请提 issue: {0}")]
+    Unexpected(String),
 }
 
 pub type AnimeResolveResult<T = ()> = Result<T, AnimeResolveError>;
@@ -34,21 +44,41 @@ impl AnimeResolver {
 
         let sn = anime.anime_sn();
         let cover = anime.cover();
-        let series = anime
-            .episodes()
-            .iter()
-            .map(|(name, episodes)| {
-                (
-                    name.to_owned(),
-                    episodes
-                        .iter()
-                        .map(|e| Episode::new(e.video_sn(), e.episode(), e.cover()))
-                        .collect(),
-                )
-            })
-            .collect();
+        let series = try_join_all(anime.episodes().iter().map(async |(_name, episodes)| {
+            let detail =
+                EpisodeDetail::from_sn(episodes[0].video_sn(), &self.request_client).await?;
 
-        Ok(Anime::new(sn, series, cover))
+            Ok::<_, AnimeResolveError>((
+                detail.series_name,
+                episodes
+                    .iter()
+                    .map(|e| Episode::new(e.video_sn(), e.episode(), e.cover()))
+                    .collect(),
+            ))
+        }))
+        .await?
+        .into_iter()
+        .collect();
+
+        let name = EpisodeDetail::from_sn(
+            anime
+                .episodes()
+                .first()
+                .ok_or(AnimeResolveError::Unexpected(
+                    "应该存在剧集系列的，不然下载什么".into(),
+                ))?
+                .1
+                .first()
+                .ok_or(AnimeResolveError::Unexpected(
+                    "应该存在剧集的，不然下载什么".into(),
+                ))?
+                .video_sn(),
+            &self.request_client,
+        )
+        .await?
+        .anime_name;
+
+        Ok(Anime::new(sn, series, cover, name))
     }
 }
 
@@ -89,7 +119,7 @@ mod test {
             anime.series(),
             &IndexMap::from([
                 (
-                    String::from("0"),
+                    String::from("本篇"),
                     [
                         (1, 3499),
                         (2, 3500),
@@ -122,7 +152,7 @@ mod test {
                     .collect::<Vec<Episode>>(),
                 ),
                 (
-                    String::from("3"),
+                    String::from("中文配音"),
                     [
                         (1, 20273),
                         (2, 20274),
@@ -175,7 +205,7 @@ mod test {
         assert_eq!(
             anime.series(),
             &IndexMap::from([(
-                String::from("1"),
+                String::from("電影"),
                 vec![Episode::new(
                     49780,
                     1,

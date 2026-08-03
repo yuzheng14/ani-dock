@@ -5,6 +5,7 @@ export type Anime = {
   id: string;
   sn: number;
   cover: string;
+  name: string;
   series: { [key in string]: Array<Episode> };
   create_at: string;
   update_at: string;

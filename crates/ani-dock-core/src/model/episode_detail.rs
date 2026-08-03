@@ -1,19 +1,27 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::LazyLock};
 
+use regex::Regex;
 use tokio::fs;
 
 use crate::{
-    anime::{
-        constant::{
-            EXTRA_FILTER_REGEX, FULL_EPISODE_REGEX, MIN_EPISODE_REGEX, SEASON_FILTER_REGEX,
-            WHITESPACES_REGEX,
-        },
-        util::get_anime_video_result_from_sn,
-    },
-    constant::BANGUMI_DIR_PATH,
-    request::RequestClient,
+    constant::BANGUMI_DIR_PATH, request::RequestClient, util::get_anime_video_result_from_sn,
     util::sanitize_path_segment,
 };
+
+pub static MIN_EPISODE_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\[\d*\.?\d* *\.?[A-Z,a-z]*(?:電影)?\]").expect("could not parse min episode regex")
+});
+pub static FULL_EPISODE_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\[.+?\]").expect("could not parse full episode regex"));
+pub static WHITESPACES_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\s+").expect("could not parse whitespaces regex"));
+
+pub static SEASON_FILTER_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"第[零一二三四五六七八九十]{1,3}季").expect("could not parse season filter regex")
+});
+pub static EXTRA_FILTER_REGEX: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\[(特別篇|中文配音)\]").expect("could not parse extra filter regex")
+});
 
 #[derive(Debug, thiserror::Error)]
 pub enum EpisodeDetailBuildError {
@@ -28,16 +36,24 @@ type EpisodeDetailBuildResult<T = ()> = Result<T, EpisodeDetailBuildError>;
 pub struct EpisodeDetail {
     /// exclude `[]`, such as `1` `2` `電影`
     pub(super) episode: String,
-    pub(super) season: String,
+    /// `{season} {dubbed}`, such as `第三季 中文配音`,
+    /// if there is no season and not movie, it will be `第一季` with extra
+    pub(super) season_with_extra: String,
+    /// name without season extra episode, used for storing path
     pub(super) name: String,
+
+    /// extra or some special episode, fallback to `本篇`
+    pub series_name: String,
+    /// name to distinguish anime
+    pub anime_name: String,
 }
 
 impl EpisodeDetail {
     pub async fn from_sn(
         sn: u32,
-        request_client: Arc<RequestClient>,
+        request_client: &RequestClient,
     ) -> EpisodeDetailBuildResult<EpisodeDetail> {
-        let video = get_anime_video_result_from_sn(sn, &request_client)
+        let video = get_anime_video_result_from_sn(sn, request_client)
             .await?
             .map_err(|err| {
                 EpisodeDetailBuildError::Plain(format!("request episode sn={sn} info error: {err}"))
@@ -57,10 +73,16 @@ impl EpisodeDetail {
 
         let name = Self::get_name(title, season.as_deref(), extra.as_deref(), &episode);
 
+        let series_name = Self::get_series_name(&episode, extra.as_deref());
+        let anime_name = Self::get_anime_name(title, extra.as_deref(), &episode);
+
         Ok(Self {
             episode,
-            season: season_with_extra,
+            season_with_extra,
             name,
+
+            series_name,
+            anime_name,
         })
     }
 
@@ -71,7 +93,7 @@ impl EpisodeDetail {
     pub fn bangumi_dir(&self) -> PathBuf {
         BANGUMI_DIR_PATH
             .join(sanitize_path_segment(&self.name))
-            .join(sanitize_path_segment(&self.season))
+            .join(sanitize_path_segment(&self.season_with_extra))
     }
 
     pub fn get_filename(&self, resolution: u64) -> String {
@@ -112,6 +134,7 @@ impl EpisodeDetail {
     }
 
     fn get_season_with_extra(episode: &str, season: Option<&str>, extra: Option<&str>) -> String {
+        // Self::inner_handle_season_and_extra(episode, season, extra, "第一季")
         match (season, extra) {
             // season 2 with dubbed will be `第二季 中文配音`
             (Some(season), Some(extra)) => format!("{season} {extra}"),
@@ -140,6 +163,24 @@ impl EpisodeDetail {
         WHITESPACES_REGEX
             .replace_all(plain_title.trim(), " ")
             .to_string()
+    }
+
+    fn get_series_name(episode: &str, extra: Option<&str>) -> String {
+        if let Some(extra) = extra {
+            String::from(extra)
+        } else {
+            let movie_string = "電影".into();
+
+            if episode == movie_string {
+                movie_string
+            } else {
+                "本篇".into()
+            }
+        }
+    }
+
+    fn get_anime_name(title: &str, extra: Option<&str>, episode: &str) -> String {
+        Self::get_name(title, None, extra, episode)
     }
 }
 
@@ -204,7 +245,7 @@ mod test {
                 .map(|t| EpisodeDetail::get_season_with_extra(
                     &EpisodeDetail::get_episode(t).unwrap(),
                     EpisodeDetail::get_season(t).as_deref(),
-                    EpisodeDetail::get_extra(t).as_deref()
+                    EpisodeDetail::get_extra(t).as_deref(),
                 ))
                 .collect::<Vec<String>>(),
             vec!["第一季", "電影", "第三季", "第一季 中文配音", "第一季"]
@@ -231,6 +272,41 @@ mod test {
                 "Re:Zero/新編集版?"
             ]
         );
+    }
+
+    #[test]
+    fn get_series_name() {
+        assert_eq!(
+            ANIME_TITLES
+                .iter()
+                .map(|t| EpisodeDetail::get_series_name(
+                    &EpisodeDetail::get_episode(t).unwrap(),
+                    EpisodeDetail::get_extra(t).as_deref(),
+                ))
+                .collect::<Vec<String>>(),
+            vec!["本篇", "電影", "本篇", "中文配音", "本篇"]
+        );
+    }
+
+    #[test]
+    fn get_anime_name() {
+        ANIME_TITLES
+            .iter()
+            .map(|t| {
+                EpisodeDetail::get_anime_name(
+                    t,
+                    EpisodeDetail::get_extra(t).as_deref(),
+                    &EpisodeDetail::get_episode(t).unwrap(),
+                )
+            })
+            .zip(vec![
+                "進擊的巨人",
+                "劇場版 關於我轉生變成史萊姆這檔事 蒼海之淚篇",
+                "無職轉生～到了異世界就拿出真本事～第三季",
+                "進擊的巨人",
+                "Re:Zero/新編集版?",
+            ])
+            .for_each(|(actual, expect)| assert_eq!(actual, expect));
     }
 
     #[test]

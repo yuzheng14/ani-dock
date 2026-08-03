@@ -5,6 +5,7 @@ use indexmap::IndexMap;
 pub struct CreateAnime {
     pub sn: u32,
     pub cover: String,
+    pub name: String,
 
     pub series: IndexMap<String, Vec<CreateEpisode>>,
 }
@@ -18,10 +19,11 @@ pub struct CreateEpisode {
 
 impl From<Anime> for CreateAnime {
     fn from(value: Anime) -> Self {
-        let (sn, series, cover) = value.into_parts();
+        let (sn, series, cover, name) = value.into_parts();
         Self {
             sn,
             cover,
+            name,
 
             series: series
                 .into_iter()

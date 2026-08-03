@@ -29,12 +29,13 @@ impl AnimeRepository {
 
         sqlx::query!(
             r#"
-            INSERT INTO anime (id, sn, cover, create_at, update_at)
-            values ($1, $2, $3, $4, $5);
+            INSERT INTO anime (id, sn, cover, name, create_at, update_at)
+            values ($1, $2, $3, $4, $5, $6);
         "#,
             anime_id,
             input.sn,
             input.cover,
+            input.name,
             create_at,
             create_at,
         )
@@ -90,6 +91,7 @@ impl AnimeRepository {
             anime.id as "id: Hyphenated",
             anime.sn as "sn: u32",
             anime.cover as cover,
+            anime.name as name,
             anime.create_at as "create_at: DateTime<Local>",
             anime.update_at as "update_at: DateTime<Local>",
             series.name as series_name,
@@ -124,6 +126,7 @@ impl AnimeRepository {
                 let id = first.id.into_uuid();
                 let sn = first.sn;
                 let cover = first.cover.clone();
+                let name = first.name.clone();
                 let create_at = first.create_at;
                 let update_at = first.update_at;
 
@@ -147,6 +150,7 @@ impl AnimeRepository {
                     id,
                     sn,
                     cover,
+                    name,
 
                     series,
 
@@ -237,6 +241,7 @@ mod anime_repository_tests {
                 sn: 3499,
                 cover: "https://example.com/anime-3499.jpg".to_owned(),
                 series: first_series,
+                name: "進擊的巨人".to_owned(),
             })
             .await?;
 
@@ -254,6 +259,7 @@ mod anime_repository_tests {
                 sn: 3499,
                 cover: "https://example.com/duplicate-anime-3499.jpg".to_owned(),
                 series: duplicate_series,
+                name: "進擊的巨人".to_owned(),
             })
             .await
             .expect_err("插入重复的动画 SN 应该失败");
@@ -304,6 +310,7 @@ mod anime_repository_tests {
                 sn: 3499,
                 cover: "https://example.com/anime-3499.jpg".to_owned(),
                 series: first_series,
+                name: "進擊的巨人".to_owned(),
             })
             .await?;
 
@@ -322,6 +329,7 @@ mod anime_repository_tests {
                 sn: 20273,
                 cover: "https://example.com/anime-20273.jpg".to_owned(),
                 series: second_series,
+                name: "進擊的巨人".to_owned(),
             })
             .await?;
 
@@ -333,6 +341,7 @@ mod anime_repository_tests {
             .iter()
             .find(|anime| anime.sn == 3499)
             .expect("应该返回第一部动画");
+        assert_eq!(first.name, "進擊的巨人");
         assert_eq!(first.cover, "https://example.com/anime-3499.jpg");
         assert_eq!(first.series.len(), 2);
 
@@ -359,6 +368,7 @@ mod anime_repository_tests {
             .iter()
             .find(|anime| anime.sn == 20273)
             .expect("应该返回第二部动画");
+        assert_eq!(second.name, "進擊的巨人");
         assert_eq!(second.cover, "https://example.com/anime-20273.jpg");
         assert_eq!(second.series.len(), 1);
 
@@ -410,6 +420,7 @@ mod episode_repository_tests {
                 sn: 3499,
                 cover: "https://example.com/anime-3499.jpg".to_owned(),
                 series,
+                name: "進擊的巨人".to_owned(),
             })
             .await?;
 
@@ -446,6 +457,7 @@ mod episode_repository_tests {
                 sn: 3499,
                 cover: "https://example.com/anime-3499.jpg".to_owned(),
                 series: first_series,
+                name: "進擊的巨人".to_owned(),
             })
             .await?;
 
@@ -463,6 +475,7 @@ mod episode_repository_tests {
                 sn: 20273,
                 cover: "https://example.com/anime-20273.jpg".to_owned(),
                 series: duplicate_series,
+                name: "進擊的巨人".to_owned(),
             })
             .await
             .expect_err("插入重复的剧集 SN 应该失败");

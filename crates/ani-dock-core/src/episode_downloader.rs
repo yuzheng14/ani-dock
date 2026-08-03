@@ -22,11 +22,11 @@ use wreq::header::REFERER;
 
 use crate::{
     Episode,
-    anime::episode_detail::{EpisodeDetail, EpisodeDetailBuildError},
     config::Config,
     constant::{ORIGIN, TMP_DIR_PATH},
     device_id::DeviceId,
     ffmpeg::{FFmpeg, FFmpegError},
+    model::episode_detail::{EpisodeDetail, EpisodeDetailBuildError},
     request::{
         self, RequestClient,
         common::DirectDataResponseBody,
@@ -263,7 +263,7 @@ impl InnerDownloader {
         }
         tracing::debug!("parsed master_pl");
 
-        let episode_detail = EpisodeDetail::from_sn(self.sn, self.request_client.clone()).await?;
+        let episode_detail = EpisodeDetail::from_sn(self.sn, &self.request_client.clone()).await?;
         episode_detail.ensure_bangumi_dir().await?;
         tracing::debug!("ensured bangumi_dir");
 

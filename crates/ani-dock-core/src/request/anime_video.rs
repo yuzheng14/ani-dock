@@ -31,6 +31,8 @@ pub struct Anime {
     cover: String,
     director: String,
     /// key is numeric string. main series will usually be `0`.
+    ///
+    /// maybe `0` is `本篇`, `3` is `中文配音`, `1` is `電影`
     episodes: IndexMap<String, Vec<Episode>>,
     /// episode's title of current sn
     title: String,

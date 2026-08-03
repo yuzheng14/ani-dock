@@ -15,18 +15,22 @@ run-server:
   cargo run -p ani-dock-server
 
 # 执行 nextest 以运行 rust 侧单测
-nextest:
-  cargo nextest run --workspace
+nextest +args="":
+  cargo nextest run --workspace {{args}}
 
 # 从 rust 类型生成 ts 类型
 gen-type:
   cargo nextest run --ignore-default-filter export_bindings
-  pnpx prettier --write packages/shared-type/types
+  pnpm -F @ani-dock/frontend exec prettier --write ../shared-type/types
+
+cargo-check:
+  cargo check --all-targets --workspace
+
+typos:
+  typos
 
 # 检查所有的 rust ts 检查，包含格式化 lint 单测
-check: nextest prettier-check typecheck lint
-  cargo check --all-targets --workspace
-  typos
+check: typos cargo-check nextest prettier-check typecheck lint
   tombi fmt --check
   cargo fmt --check
 
