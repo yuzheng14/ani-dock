@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use futures::future::try_join_all;
+use indexmap::{IndexMap, map::Entry};
 use thiserror::Error;
 
 use crate::{
@@ -21,6 +22,9 @@ pub enum AnimeResolveError {
 
     #[error("非预期情况，请提 issue: {0}")]
     Unexpected(String),
+
+    #[error("剧集名称解析存在重复，请携带该动画 sn 提 issue 报告此问题：{0}")]
+    SeriesNameCollision(String),
 }
 
 pub type AnimeResolveResult<T = ()> = Result<T, AnimeResolveError>;
@@ -44,9 +48,17 @@ impl AnimeResolver {
 
         let sn = anime.anime_sn();
         let cover = anime.cover();
-        let series = try_join_all(anime.episodes().iter().map(async |(_name, episodes)| {
-            let detail =
-                EpisodeDetail::from_sn(episodes[0].video_sn(), &self.request_client).await?;
+        let series_vec = try_join_all(anime.episodes().iter().map(async |(_name, episodes)| {
+            let detail = EpisodeDetail::from_sn(
+                episodes
+                    .first()
+                    .ok_or(AnimeResolveError::Unexpected(
+                        "应该存在剧集的，不然下载什么".into(),
+                    ))?
+                    .video_sn(),
+                &self.request_client,
+            )
+            .await?;
 
             Ok::<_, AnimeResolveError>((
                 detail.series_name,
@@ -56,27 +68,21 @@ impl AnimeResolver {
                     .collect(),
             ))
         }))
-        .await?
-        .into_iter()
-        .collect();
+        .await?;
 
-        let name = EpisodeDetail::from_sn(
-            anime
-                .episodes()
-                .first()
-                .ok_or(AnimeResolveError::Unexpected(
-                    "应该存在剧集系列的，不然下载什么".into(),
-                ))?
-                .1
-                .first()
-                .ok_or(AnimeResolveError::Unexpected(
-                    "应该存在剧集的，不然下载什么".into(),
-                ))?
-                .video_sn(),
-            &self.request_client,
-        )
-        .await?
-        .anime_name;
+        let mut series = IndexMap::with_capacity(series_vec.len());
+
+        // if there is duplicated series, then return a error
+        for (series_name, episodes) in series_vec {
+            match series.entry(series_name) {
+                Entry::Vacant(entry) => entry.insert(episodes),
+                Entry::Occupied(entry) => {
+                    return Err(AnimeResolveError::SeriesNameCollision(entry.key().clone()));
+                }
+            };
+        }
+
+        let name = EpisodeDetail::from_title(anime.title())?.anime_name;
 
         Ok(Anime::new(sn, series, cover, name))
     }

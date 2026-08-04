@@ -64,7 +64,7 @@ impl EpisodeDetail {
         Self::from_title(title)
     }
 
-    fn from_title(title: &str) -> EpisodeDetailBuildResult<Self> {
+    pub(crate) fn from_title(title: &str) -> EpisodeDetailBuildResult<Self> {
         let episode = Self::get_episode(title)?;
         let season = Self::get_season(title);
         let extra = Self::get_extra(title);
