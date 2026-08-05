@@ -216,8 +216,8 @@ function RouteComponent() {
                 />
               </ItemHeader>
               <ItemContent>
-                {/* TODO 解析动画名称 */}
-                <ItemTitle>{anime.sn}</ItemTitle>
+                <ItemTitle>{anime.name}</ItemTitle>
+                {/* TODO 增加简介 */}
                 <ItemDescription>暂无简介</ItemDescription>
               </ItemContent>
             </Item>
