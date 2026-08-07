@@ -57,5 +57,7 @@ CREATE TABLE IF NOT EXISTS download_queue (
   create_at TEXT NOT NULL,
   update_at TEXT NOT NULL
 
-  -- TODO index download for better performance
 ) WITHOUT ROWID, STRICT;
+
+CREATE INDEX IF NOT EXISTS idx_download_queue_downloaded
+ON download_queue(downloaded);

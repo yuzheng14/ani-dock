@@ -103,7 +103,7 @@ mod test {
 
         let request_client = Arc::new(RequestClient::new(
             &config.lock().unwrap(),
-            &Cookie::default(),
+            Cookie::default(),
         )?);
 
         Ok(AnimeResolver::new(request_client.clone()))

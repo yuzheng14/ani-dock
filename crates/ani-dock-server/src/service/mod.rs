@@ -98,7 +98,7 @@ mod tests {
             proxy: Some("http://127.0.0.1:1".to_string()),
             ..Config::default()
         };
-        let request_client = Arc::new(RequestClient::new(&config, &Cookie::default()).unwrap());
+        let request_client = Arc::new(RequestClient::new(&config, Cookie::default()).unwrap());
         let config = Arc::new(Mutex::new(config));
         let inner = EpisodeDownloader::new(request_client, config, DeviceId::default());
 

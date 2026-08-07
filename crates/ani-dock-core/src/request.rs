@@ -1,21 +1,24 @@
 use std::{sync::Arc, time::Duration};
 
 use thiserror::Error;
+use tokio::sync::watch;
 use wreq::{
-    Client, IntoUrl, RequestBuilder, Url, cookie,
+    Client, IntoUrl, RequestBuilder, Url,
     header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, ORIGIN},
 };
 use wreq_util::Emulation;
 
 use crate::{
     config::Config,
-    constant::{self},
+    constant::{self, ORIGIN_URL},
     cookie::Cookie,
+    request::observable_cookie_jar::ObservableCookieJar,
 };
 
 pub(crate) mod anime_video;
 pub(crate) mod common;
 pub(crate) mod device_id;
+pub(crate) mod observable_cookie_jar;
 pub(crate) mod playlist;
 pub(crate) mod token;
 
@@ -35,7 +38,7 @@ pub struct RequestClient {
 
 // TODO cookie refresh
 
-fn add_cookie_header_to_jar(jar: &cookie::Jar, cookie_header: &str, url: &Url) {
+fn add_cookie_header_to_jar(jar: &ObservableCookieJar, cookie_header: &str, url: &Url) {
     // `Jar::add_cookie_str` accepts one Set-Cookie-style record at a time, while
     // cookie.txt contains a browser Cookie request header with multiple `name=value`
     // pairs separated by semicolons.
@@ -49,7 +52,7 @@ fn add_cookie_header_to_jar(jar: &cookie::Jar, cookie_header: &str, url: &Url) {
 }
 
 impl RequestClient {
-    pub fn new(config: &Config, cookie: &Cookie) -> Result<Self, RequestError> {
+    pub fn new(config: &Config, cookie: Cookie) -> Result<Self, RequestError> {
         let lowercase_ua = config.ua.to_ascii_lowercase();
         let emulation = if lowercase_ua.contains("firefox") {
             Emulation::Firefox109
@@ -59,12 +62,24 @@ impl RequestClient {
             Emulation::Chrome137
         };
 
-        let cookie_store = Arc::new(cookie::Jar::default());
+        let (tx, mut rx) = watch::channel(String::new());
+        let cookie_store = Arc::new(ObservableCookieJar::new(ORIGIN_URL.clone(), tx));
         add_cookie_header_to_jar(
             &cookie_store,
             cookie.as_str(),
             &constant::ORIGIN.parse::<Url>()?,
         );
+
+        tokio::spawn(async move {
+            let mut cookie = cookie;
+            while rx.changed().await.is_ok() {
+                let cookie_string = rx.borrow_and_update().clone();
+                let result = cookie.set_and_write_cookie(cookie_string).await;
+                if let Err(error) = result {
+                    tracing::error!(error = %error, "存储 cookie 失败");
+                }
+            }
+        });
 
         let mut cookie_builder = Client::builder()
             .emulation(emulation)
@@ -119,7 +134,8 @@ mod test {
         let url = constant::ORIGIN
             .parse::<Url>()
             .expect("origin should be a valid URL");
-        let jar = cookie::Jar::default();
+        let (tx, _) = watch::channel(String::new());
+        let jar = ObservableCookieJar::new(url.clone(), tx);
 
         add_cookie_header_to_jar(&jar, "foo=bar; session=abc==; ; BAHAID=123", &url);
 
@@ -135,16 +151,16 @@ mod test {
         );
     }
 
-    #[test]
-    fn get_adds_custom_headers_without_replacing_emulated_user_agent() {
+    #[tokio::test]
+    async fn get_adds_custom_headers_without_replacing_emulated_user_agent() {
         let config = Config {
             // Avoid system proxy discovery while constructing a client in the isolated test
             // environment. No request is sent, so this address is never contacted.
             proxy: Some("http://127.0.0.1:1".to_string()),
             ..Config::default()
         };
-        let client = RequestClient::new(&config, &Cookie::new(""))
-            .expect("request client should be created");
+        let client =
+            RequestClient::new(&config, Cookie::new("")).expect("request client should be created");
 
         assert!(client.plain.headers().contains_key(USER_AGENT));
 

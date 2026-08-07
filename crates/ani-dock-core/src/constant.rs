@@ -1,5 +1,7 @@
 use std::{path::PathBuf, str, sync::LazyLock};
 
+use url::Url;
+
 pub static APP_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
     directories::UserDirs::new()
         .expect("Could not get config dir")
@@ -43,6 +45,9 @@ pub static TMP_DIR_PATH: LazyLock<PathBuf> = LazyLock::new(|| APP_DIR.join("tmp-
 ///
 /// https://ani.gamer.com.tw
 pub const ORIGIN: &str = "https://ani.gamer.com.tw";
+/// 解析成 Url 的动画疯的域名
+pub static ORIGIN_URL: LazyLock<Url> =
+    LazyLock::new(|| Url::parse(ORIGIN).expect("ORIGIN should parsed to url"));
 /// 动画疯 api 域名 ORIGIN
 ///
 /// https://api.gamer.com.tw

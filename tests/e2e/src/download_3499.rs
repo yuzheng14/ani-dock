@@ -18,7 +18,7 @@ async fn download_3499() -> Result<(), Box<dyn Error>> {
     let device_id = DeviceId::default();
     let config = Arc::new(Mutex::new(Config::default()));
     let cookie = Cookie::new(cookie_string);
-    let request_client = Arc::new(RequestClient::new(&config.lock().unwrap(), &cookie)?);
+    let request_client = Arc::new(RequestClient::new(&config.lock().unwrap(), cookie)?);
 
     let resolver = AnimeResolver::new(request_client.clone());
     let downloader = EpisodeDownloader::new(request_client, config, device_id);

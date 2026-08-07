@@ -30,6 +30,14 @@ impl Cookie {
         self.0
     }
 
+    pub async fn set_and_write_cookie(
+        &mut self,
+        cookie: impl Into<String>,
+    ) -> Result<(), CookieError> {
+        self.0 = cookie.into();
+        self.write_cookie().await
+    }
+
     pub async fn write_cookie(&self) -> Result<(), CookieError> {
         if let Some(parent_path) = COOKIE_FILE_PATH.parent() {
             fs::create_dir_all(parent_path)
