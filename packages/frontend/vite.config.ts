@@ -24,6 +24,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/animes': 'http://localhost:6789',
+      '/episodes': 'http://localhost:6789',
+      '/health': 'http://localhost:6789',
     },
   },
 })

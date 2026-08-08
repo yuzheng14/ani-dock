@@ -19,6 +19,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { HardDriveDownload, LibraryBig, Settings } from 'lucide-react'
 import type { CSSProperties } from 'react'
 
+// TODO health check
 function AppSidebar() {
   const { setOpenMobile } = useSidebar()
   return (
