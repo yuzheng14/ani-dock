@@ -36,8 +36,6 @@ pub struct RequestClient {
     plain: Client,
 }
 
-// TODO cookie refresh
-
 fn add_cookie_header_to_jar(jar: &ObservableCookieJar, cookie_header: &str, url: &Url) {
     // `Jar::add_cookie_str` accepts one Set-Cookie-style record at a time, while
     // cookie.txt contains a browser Cookie request header with multiple `name=value`

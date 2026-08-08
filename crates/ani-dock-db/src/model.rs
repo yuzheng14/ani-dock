@@ -1,10 +1,10 @@
 use chrono::{DateTime, Local};
 use indexmap::IndexMap;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Anime {
     pub id: Uuid,
@@ -18,7 +18,7 @@ pub struct Anime {
     pub update_at: DateTime<Local>,
 }
 
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Episode {
     pub id: Uuid,
@@ -26,6 +26,16 @@ pub struct Episode {
     // TODO save image bytes into db
     pub cover: String,
     pub episode: u32,
+
+    pub create_at: DateTime<Local>,
+    pub update_at: DateTime<Local>,
+}
+
+pub struct DownloadQueue {
+    pub id: Uuid,
+    pub downloaded: bool,
+
+    pub episode_id: Uuid,
 
     pub create_at: DateTime<Local>,
     pub update_at: DateTime<Local>,

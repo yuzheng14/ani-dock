@@ -70,7 +70,6 @@ impl Default for DownloadStatusNotifier {
     }
 }
 
-// TODO listen cookie jar change, save to config file
 #[derive(Debug, Clone)]
 pub struct EpisodeDownloader {
     request_client: Arc<RequestClient>,

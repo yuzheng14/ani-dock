@@ -9,6 +9,9 @@ mod input;
 pub mod model;
 pub mod repository;
 
+pub type CoreAnime = ani_dock_core::Anime;
+pub type CoreEpisode = ani_dock_core::Episode;
+
 pub async fn ensure_db_dir_exist() -> Result<(), std::io::Error> {
     let db_parent_dir = DB_FILE_PATH.parent().ok_or(std::io::Error::new(
         std::io::ErrorKind::AddrNotAvailable,

@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use ani_dock_core::{AnimeResolver, Config, Cookie, DeviceId, EpisodeDownloader, RequestClient};
 use ani_dock_db::{
     get_conn_pool,
-    repository::{AnimeRepository, EpisodeRepository},
+    repository::{AnimeRepository, DownloadQueueRepository, EpisodeRepository},
 };
 use ani_dock_server::{
     router::{AppState, DbRepository, get_app_router},
@@ -36,10 +36,11 @@ async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
         db: DbRepository {
             anime: AnimeRepository::new(pool.clone()),
             episode: EpisodeRepository::new(pool.clone()),
+            download_queue: DownloadQueueRepository::new(pool.clone()),
         },
         resolver,
         services: Services {
-            download: Downloader::new(downloader),
+            download: Downloader::new(downloader, DownloadQueueRepository::new(pool.clone())),
         },
     };
 

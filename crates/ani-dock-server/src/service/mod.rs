@@ -6,7 +6,8 @@ use std::{
 use ani_dock_core::{
     DownloadStatusNotifier, EpisodeDownloadError, EpisodeDownloadEvent, EpisodeDownloader,
 };
-use indexmap::IndexMap;
+use ani_dock_db::repository::DownloadQueueRepository;
+use indexmap::{IndexMap, map::Entry};
 use tokio::{sync::Semaphore, time};
 
 use crate::CoreEpisode;
@@ -16,19 +17,23 @@ pub struct Services {
     pub download: Downloader,
 }
 
+pub type StateMap = IndexMap<u32, Result<EpisodeDownloadEvent, Arc<EpisodeDownloadError>>>;
+
 #[derive(Debug, Clone)]
 pub struct Downloader {
     inner: EpisodeDownloader,
-    state_map: Arc<Mutex<IndexMap<u32, Result<EpisodeDownloadEvent, Arc<EpisodeDownloadError>>>>>,
+    state_map: Arc<Mutex<StateMap>>,
     semaphore: Arc<Semaphore>,
+    queue_repo: DownloadQueueRepository,
 }
 
 impl Downloader {
-    pub fn new(episode_downloader: EpisodeDownloader) -> Self {
+    pub fn new(episode_downloader: EpisodeDownloader, repo: DownloadQueueRepository) -> Self {
         Self {
             inner: episode_downloader,
             state_map: Arc::new(Mutex::new(IndexMap::new())),
             semaphore: Arc::new(Semaphore::new(1)),
+            queue_repo: repo,
         }
     }
 
@@ -70,14 +75,45 @@ impl Downloader {
 
             let download_result = this.inner.download(&episode, notifier).await;
             if let Err(err) = download_result {
+                let error = Arc::new(err);
                 this.state_map
                     .lock()
                     .unwrap()
-                    .insert(sn, Err(Arc::new(err)));
+                    .insert(sn, Err(error.clone()));
+                tracing::error!(error = %error, sn = %sn, "下载发生错误")
+            } else {
+                if let Err(err) = this.queue_repo.mark_downloaded(sn).await {
+                    tracing::error!(error = %err, "标记下载完成失败")
+                }
             }
 
             cooldown.await;
         });
+    }
+
+    pub fn exists(&self, sn: u32) -> bool {
+        matches!(self.state_map.lock().unwrap().entry(sn), Entry::Occupied(_))
+    }
+
+    pub fn get_undownloaded_episodes_sn(&self) -> Vec<u32> {
+        self.state_map
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|(sn, state)| {
+                if let Ok(event) = state
+                    && matches!(event, EpisodeDownloadEvent::Completed)
+                {
+                    None
+                } else {
+                    Some(sn.to_owned())
+                }
+            })
+            .collect()
+    }
+
+    pub fn is_error(&self, sn: u32) -> bool {
+        matches!(self.state_map.lock().unwrap().get(&sn), Some(Err(_)))
     }
 }
 
@@ -93,7 +129,7 @@ mod tests {
 
     use super::*;
 
-    fn test_downloader() -> Downloader {
+    async fn test_downloader() -> Downloader {
         let config = Config {
             proxy: Some("http://127.0.0.1:1".to_string()),
             ..Config::default()
@@ -101,8 +137,11 @@ mod tests {
         let request_client = Arc::new(RequestClient::new(&config, Cookie::default()).unwrap());
         let config = Arc::new(Mutex::new(config));
         let inner = EpisodeDownloader::new(request_client, config, DeviceId::default());
+        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("in-memory sqlite should connect");
 
-        Downloader::new(inner)
+        Downloader::new(inner, DownloadQueueRepository::new(pool))
     }
 
     async fn wait_for_background_tasks_to_finish(downloader: &Downloader) {
@@ -120,7 +159,7 @@ mod tests {
         const REQUEST_COUNT: usize = 32;
         const SN: u32 = 12_345;
 
-        let downloader = test_downloader();
+        let downloader = test_downloader().await;
         let permit = downloader.semaphore.acquire().await.unwrap();
         let barrier = Arc::new(Barrier::new(REQUEST_COUNT + 1));
         let mut requests = Vec::with_capacity(REQUEST_COUNT);
@@ -158,7 +197,7 @@ mod tests {
     async fn failed_download_can_be_scheduled_again() {
         const SN: u32 = 23_456;
 
-        let downloader = test_downloader();
+        let downloader = test_downloader().await;
         downloader
             .state_map
             .lock()
@@ -187,7 +226,7 @@ mod tests {
     async fn completed_download_is_not_scheduled_again() {
         const SN: u32 = 34_567;
 
-        let downloader = test_downloader();
+        let downloader = test_downloader().await;
         downloader
             .state_map
             .lock()
@@ -211,7 +250,7 @@ mod tests {
     async fn closed_semaphore_is_reported_as_download_error() {
         const SN: u32 = 45_678;
 
-        let downloader = test_downloader();
+        let downloader = test_downloader().await;
         downloader.semaphore.close();
         downloader.schedule_download(CoreEpisode::new(SN, 1, ""));
 
@@ -236,7 +275,7 @@ mod tests {
     async fn failed_download_holds_permit_during_cooldown() {
         const SN: u32 = 56_789;
 
-        let downloader = test_downloader();
+        let downloader = test_downloader().await;
         downloader.schedule_download(CoreEpisode::new(SN, 1, ""));
 
         tokio::time::timeout(Duration::from_secs(5), async {

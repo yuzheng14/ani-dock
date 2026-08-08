@@ -1,5 +1,9 @@
 use ani_dock_db::model::Anime;
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{
+    Json,
+    extract::{Query, State},
+    http::StatusCode,
+};
 use serde::Deserialize;
 
 use crate::{ApiResult, router::AppState};
@@ -30,10 +34,20 @@ pub async fn import_anime(
     Ok(StatusCode::CREATED)
 }
 
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct SelectAnimesParam {
+    downloaded: Option<bool>,
+}
+
 pub async fn select_animes(
     State(state): State<AppState>,
+    Query(query): Query<SelectAnimesParam>,
 ) -> ApiResult<(StatusCode, Json<Vec<Anime>>)> {
-    let animes = state.db.anime.select_all().await?;
+    let animes = if let Some(downloaded) = query.downloaded {
+        state.db.anime.select_by_download_status(downloaded).await?
+    } else {
+        state.db.anime.select_all().await?
+    };
 
     Ok((StatusCode::OK, Json(animes)))
 }

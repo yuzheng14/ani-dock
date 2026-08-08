@@ -30,7 +30,7 @@ pub struct ErrorBody {
     message: String,
 }
 
-pub type ApiResult<T> = Result<T, ApiError>;
+pub type ApiResult<T = ()> = Result<T, ApiError>;
 pub type CoreEpisode = ani_dock_core::Episode;
 pub type CoreAnime = ani_dock_core::Anime;
 
