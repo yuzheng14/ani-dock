@@ -51,6 +51,7 @@ fn add_cookie_header_to_jar(jar: &ObservableCookieJar, cookie_header: &str, url:
 
 impl RequestClient {
     pub fn new(config: &Config, cookie: Cookie) -> Result<Self, RequestError> {
+        // TODO dynamic config ua and cookie
         let lowercase_ua = config.ua.to_ascii_lowercase();
         let emulation = if lowercase_ua.contains("firefox") {
             Emulation::Firefox109

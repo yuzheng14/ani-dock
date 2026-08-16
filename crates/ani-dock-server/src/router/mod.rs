@@ -1,6 +1,6 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use ani_dock_core::AnimeResolver;
+use ani_dock_core::{AnimeResolver, Config, Cookie};
 use ani_dock_db::repository::{AnimeRepository, DownloadQueueRepository, EpisodeRepository};
 use axum::{
     Router,
@@ -19,6 +19,7 @@ use crate::{
 mod anime;
 mod episode;
 mod health;
+mod settings;
 
 #[derive(Debug, Clone)]
 pub struct DbRepository {
@@ -32,16 +33,21 @@ pub struct AppState {
     pub db: DbRepository,
     pub resolver: Arc<AnimeResolver>,
     pub services: Services,
+    pub config: Arc<Mutex<Config>>,
+    pub cookie: Cookie,
 }
 
 pub fn get_app_router(app_state: AppState) -> Router {
     // TODO split into concrete router file
-    Router::new()
+    let api_router = Router::new()
         .route("/health", get(health))
         .route("/animes", get(select_animes).post(import_anime))
         .route("/episodes/download", put(download))
         .route("/episodes/undownloaded", get(get_undownload_episodes))
         .route("/episodes/download/restore", post(restore_download_list))
         .route("/episodes/download/events", get(download_events))
-        .with_state(app_state)
+        .nest("/settings", settings::router())
+        .with_state(app_state);
+
+    Router::new().nest("/api", api_router)
 }

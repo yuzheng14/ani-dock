@@ -1,5 +1,7 @@
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::fs;
+use ts_rs::TS;
 
 use crate::constant::COOKIE_FILE_PATH;
 
@@ -14,7 +16,8 @@ pub enum CookieError {
     },
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct Cookie(pub String);
 
 impl Cookie {

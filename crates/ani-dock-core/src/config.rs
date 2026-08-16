@@ -3,6 +3,7 @@ use std::fmt::{self, Display, Formatter};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::fs;
+use ts_rs::TS;
 
 use crate::constant::CONFIG_FILE_PATH;
 
@@ -25,20 +26,15 @@ pub enum ConfigError {
     DeserializeConfigFile(#[from] toml::de::Error),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, TS)]
+#[ts(export)]
 pub enum DownloadResolution {
     /// 360p
     #[serde(rename = "360")]
     P360,
-    /// 480p
-    #[serde(rename = "480")]
-    P480,
     /// 540p
     #[serde(rename = "540")]
     P540,
-    /// 576p
-    #[serde(rename = "576")]
-    P576,
     /// 720p
     #[serde(rename = "720")]
     P720,
@@ -52,9 +48,7 @@ impl DownloadResolution {
     pub fn get_height(&self) -> u64 {
         match self {
             Self::P360 => 360,
-            Self::P480 => 480,
             Self::P540 => 540,
-            Self::P576 => 576,
             Self::P720 => 720,
             Self::P1080 => 1080,
         }
@@ -67,6 +61,7 @@ impl Display for DownloadResolution {
     }
 }
 
+// TODO maybe remove sn_list and this?
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum DownloadMode {
@@ -113,7 +108,8 @@ pub enum DownloadMode {
 //     pub max_retry_num: u32,
 // }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[ts(export)]
 pub struct ConfigVersion {
     /// 主版本号，主版本号变更时，配置文件将无法兼容旧版本
     pub major: u32,
@@ -121,7 +117,8 @@ pub struct ConfigVersion {
     pub minor: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
+#[ts(export)]
 pub struct InternalConfig {
     /// 配置文件版本
     pub config_version: ConfigVersion,
@@ -135,8 +132,9 @@ impl Default for InternalConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, TS)]
 #[serde(default)]
+#[ts(export)]
 pub struct Config {
     // /// 下载存放目录，动画将会以番剧为单位分文件夹存放，默认为 `bangumi`。
     // /// 相对路径时为程序所在目录的 `data` 文件夹子目录，绝对路径时为绝对路径。
@@ -159,17 +157,17 @@ pub struct Config {
     // pub download_cd: u64,
     // /// 每个番剧更新检查冷却实现（秒），默认为 5 秒。
     // pub parse_sn_cd: u64,
-    /// 下载选取清晰度，若该清晰度不存在将会选取最近可用清晰度，可选 360 480 540 576 720 1080，默认为 1080。
+    /// 下载选取清晰度，若该清晰度不存在将会选取最近可用清晰度，可选 360 540 720 1080，默认为 1080。
     pub download_resolution: DownloadResolution,
     /// 是否锁定清晰度，如果指定清晰度不存在，则放弃下载
     pub lock_resolution: bool,
     /// 是否只使用 VIP 账号下载
     pub only_use_vip: bool,
-    /// /// 默认下载模式，可选 latest 和 all，默认为 latest。
-    /// pub default_download_mode: DownloadMode,
-    /// 是否优先移动文件，而不是复制文件。如果跨设备/文件系统移动，可以设置为 false，
-    /// 文件将会先复制到目标文件夹，再删除源文件。避免移动失败的问题，默认为 true。
-    pub prefer_move: bool,
+    // /// 默认下载模式，可选 latest 和 all，默认为 latest。
+    // pub default_download_mode: DownloadMode,
+    // /// 是否优先移动文件，而不是复制文件。如果跨设备/文件系统移动，可以设置为 false，
+    // /// 文件将会先复制到目标文件夹，再删除源文件。避免移动失败的问题，默认为 true。
+    // pub prefer_move: bool,
     // /// 最大并发下载数，最高为 5，超过将重置为 5。安全起见，默认值为 1。
     // pub multi_thread: u32,
     // /// ftp 上传最大并发数，最高为 3，超过将重置为 3
@@ -179,8 +177,8 @@ pub struct Config {
     /// 每个视频最大并发下载分段数，仅在 `segment_download_mode` 为 true 时有效，最高为 5，超过将重置为 5。
     /// 默认值为 2。
     pub multi_downloading_segment: usize,
-    /// 在分段下载模式时有效，每个分段最大重试次数，-1 为无限重试。默认值为 8。
-    pub segment_max_retry: i32,
+    // /// 在分段下载模式时有效，每个分段最大重试次数，-1 为无限重试。默认值为 8。
+    // pub segment_max_retry: i32,
     // /// 是否在视频文件名中添加番剧名，格式举例: [番剧名]。
     // /// 如果为 false，则只有集数。默认值为 true。
     // pub add_bangumi_name_to_video_filename: bool,
@@ -196,6 +194,7 @@ pub struct Config {
     // pub video_filename_extension: VideoPackageExtension,
     // /// 剧集名补零，填写补足位数，例: 填写 2 剧集名称为 01，填写 3 剧集名称为 001。默认值为 1。
     // pub zerofill: u32,
+    // TODO maybe only select browser
     /// 请求UA，需要和获取cookie的浏览器相同
     pub ua: String,
     // /// 代理开关
@@ -222,13 +221,13 @@ pub struct Config {
     // pub faststart_movflags: bool,
     // /// 是否添加音轨标签，只有分段下载模式有效。默认值为 false。
     // pub audio_language: bool,
-    /// 使用移动端API进行视频解析。默认值为 false。
-    pub use_mobile_api: bool,
-    /// 是否下载弹幕(已包含动画疯内置的关键字过滤)。默认值为 false。
-    pub danmu: bool,
+    // /// 使用移动端API进行视频解析。默认值为 false。
+    // pub use_mobile_api: bool,
+    // /// 是否下载弹幕(已包含动画疯内置的关键字过滤)。默认值为 false。
+    // pub danmu: bool,
     // TODO 暂不支持正则，英文区分大小写 （(支持python的正则表达式、英文不区分大小写)）
-    /// 额外过滤弹幕关键字。默认值为空。
-    pub danmu_ban_words: Vec<String>,
+    // /// 额外过滤弹幕关键字。默认值为空。
+    // pub danmu_ban_words: Vec<String>,
     // TODO 暂不实现
     // /// 是否检查更新。默认值为 true。
     // pub check_latest_version: bool,
@@ -238,17 +237,18 @@ pub struct Config {
     // pub read_config_when_checking_update: bool,
     /// 非VIP广告等待时间, 如果等待时间不足, 程序会自行追加时间 (最大20秒)。默认值为 25。
     pub ads_time: u32,
-    /// 使用移动端 API 解析的广告等待时间。默认值为 25。
-    pub mobile_ads_time: u32,
+    // /// 使用移动端 API 解析的广告等待时间。默认值为 25。
+    // pub mobile_ads_time: u32,
     // TODO agm_server 实现后开放
     // /// Web 控制台開關
     // pub use_dashboard: bool,
     // /// Web控制面板配置
     // pub dashboard: Dashboard,
-    /// 是否記錄日志, 一天一個日志
-    pub save_logs: bool,
-    /// 日志保留数量, 正整数值, 必须大于等于 1, 默认值为 7。
-    pub quantity_of_logs: u32,
+    // TODO using this to save to file
+    // /// 是否記錄日志, 一天一個日志
+    // pub save_logs: bool,
+    // /// 日志保留数量, 正整数值, 必须大于等于 1, 默认值为 7。
+    // pub quantity_of_logs: u32,
     /// 内部配置，请勿直接修改
     pub internal: InternalConfig,
 }
@@ -260,19 +260,19 @@ impl Default for Config {
             lock_resolution: Default::default(),
             only_use_vip: Default::default(),
             // default_download_mode: Default::default(),
-            prefer_move: true,
+            // prefer_move: true,
             // multi_thread: 1,
             multi_downloading_segment: 2,
-            segment_max_retry: 8,
+            // segment_max_retry: 8,
             ua: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36 Edg/146.0.0.0".to_string(),
-            use_mobile_api: Default::default(),
-            danmu: Default::default(),
-            danmu_ban_words: Default::default(),
+            // use_mobile_api: Default::default(),
+            // danmu: Default::default(),
+            // danmu_ban_words: Default::default(),
             ads_time: 25,
-            mobile_ads_time: 25,
+            // mobile_ads_time: 25,
             proxy: Default::default(),
-            save_logs: true,
-            quantity_of_logs: 7,
+            // save_logs: true,
+            // quantity_of_logs: 7,
             internal: Default::default(),
         }
     }
@@ -329,9 +329,9 @@ impl Config {
         // self.multi_thread = self.multi_thread.clamp(1, 5);
         self.multi_downloading_segment = self.multi_downloading_segment.clamp(1, 5);
 
-        if self.quantity_of_logs < 1 {
-            self.quantity_of_logs = 1
-        }
+        // if self.quantity_of_logs < 1 {
+        //     self.quantity_of_logs = 1
+        // }
     }
 }
 
@@ -413,9 +413,7 @@ mod test {
     fn download_resolution_converts_to_string() {
         let cases = [
             (DownloadResolution::P360, "360p"),
-            (DownloadResolution::P480, "480p"),
             (DownloadResolution::P540, "540p"),
-            (DownloadResolution::P576, "576p"),
             (DownloadResolution::P720, "720p"),
             (DownloadResolution::P1080, "1080p"),
         ];
@@ -445,7 +443,7 @@ mod test {
         let expected = Config {
             // multi_thread: 3,
             proxy: Some("http://127.0.0.1:8080".to_string()),
-            danmu_ban_words: vec!["spoiler".to_string()],
+            // danmu_ban_words: vec!["spoiler".to_string()],
             ..Config::default()
         };
         fs::write(
@@ -469,16 +467,16 @@ mod test {
         for (
             _multi_thread,
             multi_downloading_segment,
-            quantity_of_logs,
+            _quantity_of_logs,
             _expected_multi_thread,
             expected_multi_downloading_segment,
-            expected_quantity_of_logs,
+            _expected_quantity_of_logs,
         ) in cases
         {
             let config = Config {
                 // multi_thread,
                 multi_downloading_segment,
-                quantity_of_logs,
+                // quantity_of_logs,
                 ..Config::default()
             };
             fs::write(CONFIG_FILE_PATH.as_path(), toml::to_string_pretty(&config)?).await?;
@@ -490,7 +488,7 @@ mod test {
                 normalized.multi_downloading_segment,
                 expected_multi_downloading_segment
             );
-            assert_eq!(normalized.quantity_of_logs, expected_quantity_of_logs);
+            // assert_eq!(normalized.quantity_of_logs, expected_quantity_of_logs);
         }
 
         Ok(())
@@ -502,7 +500,7 @@ mod test {
         let expected = Config {
             download_resolution: DownloadResolution::P720,
             // default_download_mode: DownloadMode::All,
-            save_logs: false,
+            // save_logs: false,
             ..Config::default()
         };
 

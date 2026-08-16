@@ -24,13 +24,13 @@ async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
     let pool = get_conn_pool().await?;
     let cookie = Cookie::read_cookie().await?;
     let config = Config::read_config().await?;
-    let request_client = Arc::new(RequestClient::new(&config, cookie)?);
+    let request_client = Arc::new(RequestClient::new(&config, cookie.clone())?);
     let config = Arc::new(Mutex::new(config));
     let device_id = DeviceId::default();
 
     let resolver = Arc::new(AnimeResolver::new(request_client.clone()));
     // TODO use notifier to change status
-    let downloader = EpisodeDownloader::new(request_client, config, device_id);
+    let downloader = EpisodeDownloader::new(request_client, config.clone(), device_id);
 
     let state = AppState {
         db: DbRepository {
@@ -42,6 +42,8 @@ async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
         services: Services {
             download: Downloader::new(downloader, DownloadQueueRepository::new(pool.clone())),
         },
+        config,
+        cookie,
     };
 
     let app = get_app_router(state);

@@ -138,7 +138,7 @@ function useDownloadEvent() {
 
   useEffect(() => {
     // TODO handle error event
-    const es = new EventSource('/episodes/download/events')
+    const es = new EventSource('/api/episodes/download/events')
     function snapshotHandler(this: EventSource, ev: MessageEvent) {
       const dataEvents = JSON.parse(ev.data) as DownloadEvent[]
       setDownloadEventMap(new Map(dataEvents.map((de) => [de.episode.sn, de])))

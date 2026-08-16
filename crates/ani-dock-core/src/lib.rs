@@ -12,7 +12,7 @@ pub(crate) mod sn_list;
 pub(crate) mod util;
 
 pub use anime_resolver::{AnimeResolveError, AnimeResolver};
-pub use config::{Config, ConfigError};
+pub use config::{Config, ConfigError, ConfigVersion, DownloadResolution, InternalConfig};
 pub use cookie::{Cookie, CookieError};
 pub use device_id::DeviceId;
 pub use episode_downloader::{

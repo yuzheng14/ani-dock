@@ -1,4 +1,4 @@
-use ani_dock_core::AnimeResolveError;
+use ani_dock_core::{AnimeResolveError, ConfigError, CookieError};
 use axum::{Json, http::StatusCode, response::IntoResponse};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -16,6 +16,10 @@ pub enum ApiError {
     EpisodeNotFound(u32),
     #[error("SSE 事件数据转换出错：{0}")]
     SSEEventJsonDataConvert(axum::Error),
+    #[error("写入配置文件错误：{0}")]
+    WriteConfig(#[from] ConfigError),
+    #[error("写入 cookie 文件错误：{0}")]
+    WriteCookie(#[from] CookieError),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -25,6 +29,8 @@ pub enum ErrorCode {
     ResolveAnimeError,
     EpisodeNotFound,
     SSEEventJsonDataConvert,
+    WriteConfig,
+    WriteCookie,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -69,6 +75,22 @@ impl IntoResponse for ApiError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorBody {
                     code: ErrorCode::SSEEventJsonDataConvert,
+                    message: self.to_string(),
+                }),
+            )
+                .into_response(),
+            Self::WriteConfig(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: ErrorCode::WriteConfig,
+                    message: self.to_string(),
+                }),
+            )
+                .into_response(),
+            Self::WriteCookie(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: ErrorCode::WriteCookie,
                     message: self.to_string(),
                 }),
             )

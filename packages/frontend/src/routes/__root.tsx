@@ -26,7 +26,7 @@ function AppSidebar() {
 
   // TODO move this to server?
   useEffect(() => {
-    fetch('/episodes/download/restore', {
+    fetch('/api/episodes/download/restore', {
       method: 'POST',
     }).catch(() => {
       toast.add({

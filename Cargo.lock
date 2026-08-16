@@ -98,6 +98,7 @@ dependencies = [
  "futures",
  "indexmap",
  "serde",
+ "serde_json",
  "sqlx",
  "thiserror",
  "tokio",

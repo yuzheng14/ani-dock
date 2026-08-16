@@ -51,7 +51,7 @@ function AddAnimeButton() {
   const addAnime = useMutation({
     mutationFn: async (literalSn: string) => {
       const sn = Number(literalSn)
-      const resp = await fetch('/animes', {
+      const resp = await fetch('/api/animes', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -146,7 +146,7 @@ function DownloadButton({ anime }: { anime: Anime }) {
   const mutation = useMutation({
     mutationFn: async (rowSns: string[]) => {
       const sns = rowSns.map((sn) => Number(sn))
-      const resp = await fetch('/episodes/download', {
+      const resp = await fetch('/api/episodes/download', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -231,7 +231,7 @@ function RouteComponent() {
   const { data, isError, isLoading, error } = useQuery({
     queryKey: ['animes'],
     queryFn: async () => {
-      const resp = await fetch('/animes')
+      const resp = await fetch('/api/animes')
 
       if (!resp.ok) {
         throw await resp.json()
