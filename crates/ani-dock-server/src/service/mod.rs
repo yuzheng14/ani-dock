@@ -8,7 +8,10 @@ use ani_dock_core::{
 };
 use ani_dock_db::repository::DownloadQueueRepository;
 use indexmap::{IndexMap, map::Entry};
-use tokio::{sync::Semaphore, time};
+use tokio::{
+    sync::{Semaphore, broadcast},
+    time,
+};
 
 use crate::CoreEpisode;
 
@@ -17,7 +20,9 @@ pub struct Services {
     pub download: Downloader,
 }
 
-pub type StateMap = IndexMap<u32, Result<EpisodeDownloadEvent, Arc<EpisodeDownloadError>>>;
+pub type DownloadState = Result<EpisodeDownloadEvent, Arc<EpisodeDownloadError>>;
+
+pub type StateMap = IndexMap<u32, DownloadState>;
 
 #[derive(Debug, Clone)]
 pub struct Downloader {
@@ -25,15 +30,18 @@ pub struct Downloader {
     state_map: Arc<Mutex<StateMap>>,
     semaphore: Arc<Semaphore>,
     queue_repo: DownloadQueueRepository,
+    tx: broadcast::Sender<DownloadStatus>,
 }
 
 impl Downloader {
     pub fn new(episode_downloader: EpisodeDownloader, repo: DownloadQueueRepository) -> Self {
+        let (tx, _) = broadcast::channel(128);
         Self {
             inner: episode_downloader,
             state_map: Arc::new(Mutex::new(IndexMap::new())),
             semaphore: Arc::new(Semaphore::new(1)),
             queue_repo: repo,
+            tx,
         }
     }
 
@@ -50,6 +58,10 @@ impl Downloader {
             }
 
             state_map.insert(sn, Ok(EpisodeDownloadEvent::Pending));
+            let _ = self.tx.send(DownloadStatus {
+                sn,
+                state: Ok(EpisodeDownloadEvent::Pending),
+            });
         }
 
         let this = self.clone();
@@ -61,6 +73,10 @@ impl Downloader {
                     .lock()
                     .unwrap()
                     .insert(sn, Err(Arc::new(EpisodeDownloadError::AcquireSemaphore)));
+                let _ = this.tx.send(DownloadStatus {
+                    sn,
+                    state: Err(Arc::new(EpisodeDownloadError::AcquireSemaphore)),
+                });
                 return;
             }
 
@@ -69,8 +85,13 @@ impl Downloader {
             let cooldown = time::sleep(Duration::from_secs(24 * 60));
 
             let status_map = this.state_map.clone();
+            let tx = this.tx.clone();
             let notifier = DownloadStatusNotifier::new(move |event| {
-                status_map.lock().unwrap().insert(sn, Ok(event));
+                status_map.lock().unwrap().insert(sn, Ok(event.clone()));
+                let _ = tx.send(DownloadStatus {
+                    sn,
+                    state: Ok(event),
+                });
             });
 
             let download_result = this.inner.download(&episode, notifier).await;
@@ -80,6 +101,10 @@ impl Downloader {
                     .lock()
                     .unwrap()
                     .insert(sn, Err(error.clone()));
+                let _ = this.tx.send(DownloadStatus {
+                    sn,
+                    state: Err(error.clone()),
+                });
                 tracing::error!(error = %error, sn = %sn, "下载发生错误")
             } else {
                 if let Err(err) = this.queue_repo.mark_downloaded(sn).await {
@@ -115,6 +140,28 @@ impl Downloader {
     pub fn is_error(&self, sn: u32) -> bool {
         matches!(self.state_map.lock().unwrap().get(&sn), Some(Err(_)))
     }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<DownloadStatus> {
+        self.tx.subscribe()
+    }
+
+    pub fn state_snapshot(&self) -> Vec<DownloadStatus> {
+        self.state_map
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|(sn, state)| DownloadStatus {
+                sn: sn.to_owned(),
+                state: state.to_owned(),
+            })
+            .collect()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DownloadStatus {
+    pub sn: u32,
+    pub state: DownloadState,
 }
 
 #[cfg(test)]
@@ -300,5 +347,34 @@ mod tests {
             0,
             "download permit should stay held until the cooldown ends"
         );
+    }
+
+    #[tokio::test]
+    async fn subscribe_receives_broadcast_of_pending_state() {
+        const SN: u32 = 67_890;
+
+        let downloader = test_downloader().await;
+        let permit = downloader.semaphore.acquire().await.unwrap();
+        let mut rx = downloader.subscribe();
+
+        downloader.schedule_download(CoreEpisode::new(SN, 1, ""));
+
+        let status = rx
+            .recv()
+            .await
+            .expect("schedule_download should broadcast a pending event");
+        assert_eq!(status.sn, SN);
+        assert!(matches!(status.state, Ok(EpisodeDownloadEvent::Pending)));
+
+        let snapshot = downloader.state_snapshot();
+        assert!(
+            snapshot
+                .iter()
+                .any(|s| { s.sn == SN && matches!(s.state, Ok(EpisodeDownloadEvent::Pending)) })
+        );
+
+        downloader.semaphore.close();
+        drop(permit);
+        wait_for_background_tasks_to_finish(&downloader).await;
     }
 }

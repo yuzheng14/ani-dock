@@ -6,6 +6,7 @@ import './index.css'
 import { ThemeProvider } from '@/components/theme-provider.tsx'
 import { routeTree } from './routeTree.gen'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { Toaster } from './components/ui/toast'
 
 const router = createRouter({ routeTree })
 
@@ -22,6 +23,7 @@ createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider disableTransitionOnChange={false}>
         <RouterProvider router={router} />
+        <Toaster />
       </ThemeProvider>
     </QueryClientProvider>
   </StrictMode>

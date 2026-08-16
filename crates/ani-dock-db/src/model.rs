@@ -18,7 +18,7 @@ pub struct Anime {
     pub update_at: DateTime<Local>,
 }
 
-#[derive(Debug, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Episode {
     pub id: Uuid,

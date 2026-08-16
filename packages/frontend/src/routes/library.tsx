@@ -175,6 +175,7 @@ function DownloadButton({ anime }: { anime: Anime }) {
           </DialogDescription>
         </DialogHeader>
         <FieldGroup>
+          {/* TODO add select all or otherwise */}
           {Object.entries(anime.series).map(([name, episodes]) => (
             <Field key={name}>
               <FieldLabel>{name}</FieldLabel>
@@ -206,6 +207,7 @@ function DownloadButton({ anime }: { anime: Anime }) {
         {mutation.isError && (
           <p className="text-sm text-destructive">{mutation.error.message}</p>
         )}
+        {/* TODO add selected reminder */}
         <DialogFooter>
           <DialogClose render={<Button variant={'outline'} />}>
             取消

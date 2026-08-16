@@ -19,6 +19,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true, features = ["fs", "process"] }
 toml = { workspace = true }
 tracing = { workspace = true }
+ts-rs.workspace = true
 url = "2.5.8"
 wreq = {
   version = "5.3.0",

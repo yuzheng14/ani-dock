@@ -10,7 +10,7 @@ use axum::{
 use crate::{
     router::{
         anime::{import_anime, select_animes},
-        episode::{download, get_undownload_episodes, restore_download_list},
+        episode::{download, download_events, get_undownload_episodes, restore_download_list},
         health::health,
     },
     service::Services,
@@ -35,11 +35,13 @@ pub struct AppState {
 }
 
 pub fn get_app_router(app_state: AppState) -> Router {
+    // TODO split into concrete router file
     Router::new()
         .route("/health", get(health))
         .route("/animes", get(select_animes).post(import_anime))
         .route("/episodes/download", put(download))
         .route("/episodes/undownloaded", get(get_undownload_episodes))
         .route("/episodes/download/restore", post(restore_download_list))
+        .route("/episodes/download/events", get(download_events))
         .with_state(app_state)
 }

@@ -14,6 +14,8 @@ pub enum ApiError {
     ResolveAnimeError(#[from] AnimeResolveError),
     #[error("未找到当前剧集，可能是未解析动画，剧集 sn 为 {0}")]
     EpisodeNotFound(u32),
+    #[error("SSE 事件数据转换出错：{0}")]
+    SSEEventJsonDataConvert(axum::Error),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -22,6 +24,7 @@ pub enum ErrorCode {
     DbError,
     ResolveAnimeError,
     EpisodeNotFound,
+    SSEEventJsonDataConvert,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -58,6 +61,14 @@ impl IntoResponse for ApiError {
                 StatusCode::NOT_FOUND,
                 Json(ErrorBody {
                     code: ErrorCode::EpisodeNotFound,
+                    message: self.to_string(),
+                }),
+            )
+                .into_response(),
+            Self::SSEEventJsonDataConvert(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorBody {
+                    code: ErrorCode::SSEEventJsonDataConvert,
                     message: self.to_string(),
                 }),
             )

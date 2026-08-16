@@ -67,6 +67,7 @@ dependencies = [
  "tokio",
  "toml",
  "tracing",
+ "ts-rs",
  "url",
  "wreq",
  "wreq-util",
@@ -100,8 +101,10 @@ dependencies = [
  "sqlx",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "tracing",
  "tracing-subscriber",
+ "ts-rs",
  "uuid",
 ]
 
@@ -2564,6 +2567,7 @@ dependencies = [
  "futures-core",
  "pin-project-lite",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

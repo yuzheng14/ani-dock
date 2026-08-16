@@ -1,8 +1,28 @@
-use ani_dock_db::model::Episode;
-use axum::{Json, extract::State, http::StatusCode};
-use futures::future::try_join_all;
+use std::convert::Infallible;
 
-use crate::{ApiError, ApiResult, CoreEpisode, router::AppState};
+use ani_dock_db::{
+    model::Episode,
+    repository::{DbResult, EpisodeRepository},
+};
+use axum::{
+    Json,
+    extract::State,
+    http::StatusCode,
+    response::{
+        Sse,
+        sse::{Event, KeepAlive},
+    },
+};
+use futures::{Stream, StreamExt, future::try_join_all, stream};
+use serde::Serialize;
+use tokio_stream::wrappers::{BroadcastStream, errors::BroadcastStreamRecvError};
+use ts_rs::TS;
+
+use crate::{
+    ApiError, ApiResult, CoreEpisode,
+    router::AppState,
+    service::{DownloadState, DownloadStatus},
+};
 
 pub async fn download(
     State(state): State<AppState>,
@@ -35,6 +55,7 @@ pub async fn download(
     Ok(StatusCode::ACCEPTED)
 }
 
+// TODO reserve order
 pub async fn restore_download_list(State(state): State<AppState>) -> ApiResult {
     let undownloaded_animes = state.db.anime.select_by_download_status(false).await?;
 
@@ -68,4 +89,82 @@ pub async fn get_undownload_episodes(
     .collect();
 
     Ok(Json(episodes))
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+#[ts(export)]
+pub struct DownloadEvent {
+    episode: Episode,
+    state: DownloadState,
+}
+
+impl DownloadEvent {
+    // TODO cache
+    pub async fn from_download_status(
+        ds: DownloadStatus,
+        repo: &EpisodeRepository,
+    ) -> DbResult<Self> {
+        let episode = repo.select(ds.sn).await?.ok_or(sqlx::Error::RowNotFound)?;
+
+        Ok(Self {
+            episode,
+            state: ds.state,
+        })
+    }
+}
+
+pub async fn download_events(
+    State(state): State<AppState>,
+) -> ApiResult<Sse<impl Stream<Item = Result<Event, Infallible>>>> {
+    let rx = state.services.download.subscribe();
+
+    let snapshot = state.services.download.state_snapshot();
+
+    // TODO use cache to reduce query
+    let snapshot = try_join_all(
+        snapshot
+            .into_iter()
+            .map(async |ds| DownloadEvent::from_download_status(ds, &state.db.episode).await),
+    )
+    .await?;
+
+    let snapshot = Event::default()
+        .event("snapshot")
+        .json_data(snapshot)
+        .map_err(ApiError::SSEEventJsonDataConvert)?;
+
+    let repo = state.db.episode.clone();
+    let updates = BroadcastStream::new(rx).filter_map(move |ds| {
+        let repo = repo.clone();
+        async move {
+            let de = match ds {
+                Ok(ds) => match DownloadEvent::from_download_status(ds, &repo).await {
+                    Ok(de) => de,
+                    Err(err) => {
+                        tracing::error!(error = %err, "下载接收端解析剧集失败");
+                        return None;
+                    }
+                },
+                Err(BroadcastStreamRecvError::Lagged(skipped)) => {
+                    tracing::warn!(skipped, "下载接收端发生滞后");
+                    return None;
+                }
+            };
+
+            let event = match Event::default().event("update").json_data(de) {
+                Ok(event) => event,
+                Err(err) => {
+                    let err = ApiError::SSEEventJsonDataConvert(err);
+                    tracing::error!(error = %err);
+                    return None;
+                }
+            };
+
+            Some(Ok::<_, Infallible>(event))
+        }
+    });
+
+    let stream = stream::once(async { Ok::<_, Infallible>(snapshot) }).chain(updates);
+
+    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }

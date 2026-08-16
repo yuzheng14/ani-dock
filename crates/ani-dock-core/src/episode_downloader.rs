@@ -17,6 +17,7 @@ use tokio::{
     io::AsyncWriteExt,
     time,
 };
+use ts_rs::TS;
 use url::Url;
 use wreq::header::REFERER;
 
@@ -125,6 +126,28 @@ pub enum EpisodeDownloadError {
     /// 供上层使用
     #[error("获取下载器并发锁失败")]
     AcquireSemaphore,
+}
+
+impl Serialize for EpisodeDownloadError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl TS for EpisodeDownloadError {
+    type WithoutGenerics = Self;
+    type OptionInnerType = Self;
+
+    fn name(_: &ts_rs::Config) -> String {
+        "string".to_owned()
+    }
+
+    fn inline(_: &ts_rs::Config) -> String {
+        "string".to_owned()
+    }
 }
 
 impl From<nom::error::Error<&[u8]>> for EpisodeDownloadError {
@@ -660,8 +683,9 @@ impl InnerDownloader {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE", tag = "type")]
+#[ts(export)]
 pub enum EpisodeDownloadEvent {
     /// 尚未开始，供上层使用，core 模块内不使用
     Pending,
@@ -682,15 +706,10 @@ pub enum EpisodeDownloadEvent {
 }
 
 #[cfg(test)]
-mod m3u8_test {
-    use std::{
-        error::Error,
-        sync::{Arc, Mutex},
-    };
+mod notifier_test {
+    use std::sync::{Arc, Mutex};
 
-    use m3u8_rs::{KeyMethod, Resolution};
     use serde_json::json;
-    use url::Url;
 
     use super::{DownloadStatusNotifier, EpisodeDownloadEvent};
 
@@ -716,53 +735,80 @@ mod m3u8_test {
         assert_eq!(
             *received.lock().unwrap(),
             vec![
-                json!("PREPARING"),
+                json!({ "type": "PREPARING" }),
                 json!({
-                    "DOWNLOADING_SEGMENTS": {
-                        "completed": 2,
-                        "total": 5
-                    }
+                    "type": "DOWNLOADING_SEGMENTS",
+                    "completed": 2,
+                    "total": 5
                 }),
             ]
         );
     }
+}
+
+#[cfg(test)]
+mod serialize_test {
+    use super::{EpisodeDownloadError, EpisodeDownloadEvent};
 
     #[test]
-    fn episode_download_events_have_stable_json_shapes() -> Result<(), serde_json::Error> {
+    fn episode_download_event_serializes_to_explicit_json_strings() -> Result<(), serde_json::Error>
+    {
         let cases = [
-            (EpisodeDownloadEvent::Pending, json!("PENDING")),
-            (EpisodeDownloadEvent::Preparing, json!("PREPARING")),
+            (EpisodeDownloadEvent::Pending, "{\"type\":\"PENDING\"}"),
+            (EpisodeDownloadEvent::Preparing, "{\"type\":\"PREPARING\"}"),
             (
                 EpisodeDownloadEvent::WaitingForAds,
-                json!("WAITING_FOR_ADS"),
+                "{\"type\":\"WAITING_FOR_ADS\"}",
             ),
             (
                 EpisodeDownloadEvent::ResolveMediaResource,
-                json!("RESOLVE_MEDIA_RESOURCE"),
+                "{\"type\":\"RESOLVE_MEDIA_RESOURCE\"}",
             ),
             (
                 EpisodeDownloadEvent::DownloadingSegments {
                     completed: 3,
                     total: 8,
                 },
-                json!({
-                    "DOWNLOADING_SEGMENTS": {
-                        "completed": 3,
-                        "total": 8
-                    }
-                }),
+                "{\"type\":\"DOWNLOADING_SEGMENTS\",\"completed\":3,\"total\":8}",
             ),
-            (EpisodeDownloadEvent::Merging, json!("MERGING")),
-            (EpisodeDownloadEvent::Finalizing, json!("FINALIZING")),
-            (EpisodeDownloadEvent::Completed, json!("COMPLETED")),
+            (EpisodeDownloadEvent::Merging, "{\"type\":\"MERGING\"}"),
+            (
+                EpisodeDownloadEvent::Finalizing,
+                "{\"type\":\"FINALIZING\"}",
+            ),
+            (EpisodeDownloadEvent::Completed, "{\"type\":\"COMPLETED\"}"),
         ];
 
         for (event, expected) in cases {
-            assert_eq!(serde_json::to_value(event)?, expected);
+            assert_eq!(serde_json::to_string(&event)?, expected);
         }
 
         Ok(())
     }
+
+    #[test]
+    fn download_state_serializes_as_ok_or_err() -> Result<(), serde_json::Error> {
+        let ok: Result<EpisodeDownloadEvent, EpisodeDownloadError> =
+            Ok(EpisodeDownloadEvent::Pending);
+        assert_eq!(
+            serde_json::to_string(&ok)?,
+            "{\"Ok\":{\"type\":\"PENDING\"}}"
+        );
+
+        let err: Result<EpisodeDownloadEvent, EpisodeDownloadError> =
+            Err(EpisodeDownloadError::DeviceIdMissing);
+        assert_eq!(serde_json::to_string(&err)?, "{\"Err\":\"设备 ID 不存在\"}");
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod m3u8_test {
+    use std::error::Error;
+
+    use m3u8_rs::{KeyMethod, Resolution};
+    use url::Url;
 
     #[test]
     fn m3u8_parse_master_playlist() -> Result<(), Box<dyn Error>> {
