@@ -4,8 +4,11 @@ use ani_dock_core::{AnimeResolver, Config, Cookie};
 use ani_dock_db::repository::{AnimeRepository, DownloadQueueRepository, EpisodeRepository};
 use axum::{
     Router,
+    http::StatusCode,
     routing::{get, post, put},
 };
+#[cfg(not(debug_assertions))]
+use tower_http::services::{ServeDir, ServeFile};
 
 use crate::{
     router::{
@@ -47,7 +50,14 @@ pub fn get_app_router(app_state: AppState) -> Router {
         .route("/episodes/download/restore", post(restore_download_list))
         .route("/episodes/download/events", get(download_events))
         .nest("/settings", settings::router())
+        .fallback(|| async { StatusCode::NOT_FOUND })
         .with_state(app_state);
 
-    Router::new().nest("/api", api_router)
+    let router = Router::new().nest("/api", api_router);
+
+    #[cfg(not(debug_assertions))]
+    let router = router
+        .fallback_service(ServeDir::new("./dist").fallback(ServeFile::new("./dist/index.html")));
+
+    router
 }
