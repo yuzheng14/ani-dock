@@ -1,0 +1,42 @@
+services:
+  ani-dock:
+    image: ${ANI_DOCK_IMAGE:-ani-dock:latest}
+
+    build: .
+
+    environment:
+      ANI_DOCK_HOST: ${ANI_DOCK_HOST:-0.0.0.0}
+      RUST_LOG: ${RUST_LOG:-info}
+
+    ports:
+      - ${ANI_DOCK_BIND_HOST:-127.0.0.1}:${ANI_DOCK_PORT:-6789}:6789
+
+    volumes:
+      - ${ANI_DOCK_VOLUMES:-ani-dock-data}:/home/anidock/.ani-dock
+
+    restart: unless-stopped
+
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -fsS
+        - http://127.0.0.1:6789/api/health
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    # startup a init process to clear ffmpeg subprocess
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+
+volumes:
+  ani-dock-data:

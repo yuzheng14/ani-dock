@@ -595,6 +595,25 @@ impl InnerDownloader {
         // FIXME it seems like using
         // https://api.gamer.com.tw/anime/v1/video_src.php?videoSn=49953&deviceid=0118ddf4664ceba5c04a12aec5025b4d7c93819911f881586a5a65f00630&deviceTypeUseCases=1
         // now
+        //
+        // response:
+        // {
+        //     "data": {
+        //         "deviceid": "<deviceid>",
+        //         "srcUseCases": [
+        //             {
+        //                 "deviceType": 1,
+        //                 "src": {
+        //                     "playlist": "<playlist url>"
+        //                 }
+        //             }
+        //         ]
+        //     }
+        // }
+        //
+        // request: videoSn=50518&deviceid=0343eaec37788016bd37175ef8a0ced9be8d4fa75ba88e186a832f321614&deviceTypeUseCases=1
+        //
+        // also save device_id, this will change device_id
         let url = format!(
             "{ORIGIN}/ajax/m3u8.php?sn={}&device={}",
             self.sn,
