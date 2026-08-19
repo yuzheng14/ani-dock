@@ -12,6 +12,9 @@ use ani_dock_server::{
 use axum::serve;
 use tracing_subscriber::EnvFilter;
 
+// TODO shutdown gracefully
+// FIXME if there is no cookie, it should be restart to download as guest otherwise it will be 404
+// on media playlist
 async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -48,12 +51,17 @@ async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = get_app_router(state);
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:6789")
+    let host = std::env::var("ANI_DOCK_HOST").unwrap_or_else(|_| "127.0.0.1".into());
+    let port = std::env::var("ANI_DOCK_PORT")
+        .unwrap_or_else(|_| "6789".into())
+        .parse::<u16>()?;
+
+    let listener = tokio::net::TcpListener::bind((host.as_str(), port))
         .await
         .expect("could not start server");
-    tracing::info!("server started, listener at: 127.0.0.1:6789");
+    tracing::info!(host = host, port = port, "server started");
 
-    serve(listener, app).await.expect("server serve error");
+    serve(listener, app).await?;
 
     Ok(())
 }

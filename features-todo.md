@@ -4,5 +4,5 @@
 
 # Features TODO List before release
 
-- [ ] cookie set
-- [ ] config page
+- [x] cookie set
+- [x] config page

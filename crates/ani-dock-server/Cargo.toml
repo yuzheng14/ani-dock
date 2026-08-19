@@ -15,6 +15,7 @@ sqlx.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread"] }
 tokio-stream = { workspace = true, features = ["sync"] }
+tower-http = { version = "0.7.0", features = ["fs"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 ts-rs.workspace = true

@@ -1,0 +1,15 @@
+.git
+target
+node_modules
+**/node_modules
+packages/frontend/dist
+aniGamerPlus
+
+.env
+.ani-dock
+cookie*.txt
+**/cookie*.txt
+**/*.log
+
+crates/ani-dock-db/*.sqlite-shm
+crates/ani-dock-db/*.sqlite-wal
