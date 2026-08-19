@@ -101,6 +101,7 @@ jobs:
             sleep 2
           done
 
+          echo "::error::Container did not become healthy after ${attempt} attempts"
           docker compose ps
           curl --fail --show-error http://127.0.0.1:6789/api/health
 
