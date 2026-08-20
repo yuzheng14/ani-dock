@@ -1,10 +1,11 @@
 use std::{sync::Arc, time::Duration};
 
+use serde::de::DeserializeOwned;
 use thiserror::Error;
 use tokio::sync::watch;
 use wreq::{
     Client, IntoUrl, RequestBuilder, Url,
-    header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, ORIGIN},
+    header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, CONTENT_TYPE, ORIGIN},
 };
 use wreq_util::Emulation;
 
@@ -19,8 +20,8 @@ pub(crate) mod anime_video;
 pub(crate) mod common;
 pub(crate) mod device_id;
 pub(crate) mod observable_cookie_jar;
-pub(crate) mod playlist;
 pub(crate) mod token;
+pub(crate) mod video_src;
 
 #[derive(Debug, Error)]
 pub enum RequestError {
@@ -118,6 +119,45 @@ impl RequestClient {
             .header(ACCEPT_ENCODING, "gzip, deflate")
             .header(CACHE_CONTROL, "max-age=0")
             .header(ORIGIN, constant::ORIGIN)
+    }
+}
+
+const MAX_LOGGED_RESPONSE_BODY: usize = 8 * 1024;
+
+pub(crate) trait JsonResponseExt {
+    async fn json_or_log<T>(self) -> wreq::Result<T>
+    where
+        T: DeserializeOwned;
+}
+
+impl JsonResponseExt for wreq::Response {
+    async fn json_or_log<T>(self) -> wreq::Result<T>
+    where
+        T: DeserializeOwned,
+    {
+        let status = self.status();
+
+        // avoid writing query string, such as device_id, into log
+        let mut url = self.url().clone();
+        url.set_query(None);
+
+        let content_type = self
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("<unknown>")
+            .to_owned();
+
+        let body = self.bytes().await?;
+
+        serde_json::from_slice(&body).map_err(|error| {
+            let preview_len = body.len().min(MAX_LOGGED_RESPONSE_BODY);
+            let body_preview = String::from_utf8_lossy(&body[..preview_len]);
+
+            tracing::error!(%error, %status, %url, %content_type, body_len = body.len(), truncated = body.len() > preview_len, response_body = %body_preview, "JSON 响应反序列化失败");
+
+            wreq::Error::from(error)
+        })
     }
 }
 

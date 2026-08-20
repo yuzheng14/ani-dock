@@ -7,7 +7,7 @@ use wreq::header::REFERER;
 use crate::{
     RequestClient,
     constant::{API_ORIGIN, ORIGIN},
-    request::{anime_video::Video, common::CommonResponseBody},
+    request::{JsonResponseExt, anime_video::Video, common::CommonResponseBody},
 };
 
 static CHARS_VEC: LazyLock<Vec<char>> = LazyLock::new(|| {
@@ -53,7 +53,7 @@ pub async fn get_anime_video_result_from_sn(
         .send()
         .await?
         .error_for_status()?
-        .json()
+        .json_or_log()
         .await?;
 
     Ok(anime_video.into_result())

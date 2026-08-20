@@ -24,15 +24,15 @@ use wreq::header::REFERER;
 use crate::{
     Episode,
     config::Config,
-    constant::{ORIGIN, TMP_DIR_PATH},
+    constant::{API_ORIGIN, ORIGIN, TMP_DIR_PATH},
     device_id::DeviceId,
     ffmpeg::{FFmpeg, FFmpegError},
     model::episode_detail::{EpisodeDetail, EpisodeDetailBuildError},
     request::{
-        self, RequestClient,
-        common::DirectDataResponseBody,
-        playlist::PlaylistSrc,
+        self, JsonResponseExt, RequestClient,
+        common::{CommonResponseBody, DirectDataResponseBody},
         token::{Token, TokenError},
+        video_src::VideoSrc,
     },
     util::{get_referer, random_string},
 };
@@ -258,15 +258,14 @@ impl InnerDownloader {
 
         self.notifier
             .notify(EpisodeDownloadEvent::ResolveMediaResource);
-        let playlist = self.get_playlist().await?;
 
-        let src = playlist.src();
+        let src = self.get_playlist_src().await?;
 
-        tracing::debug!(%src, "master playlist");
+        tracing::debug!(src = %src, "master playlist");
 
         let master_pl_bytes = self
             .request_client
-            .get(src, false)
+            .get(&src, false)
             .header(REFERER, get_referer(self.sn))
             .send()
             .await?
@@ -310,7 +309,7 @@ impl InnerDownloader {
             "decided path and file name"
         );
 
-        let media_pl_src = Url::parse(src)?.join(&variant.uri)?;
+        let media_pl_src = Url::parse(&src)?.join(&variant.uri)?;
         tracing::debug!(url = %media_pl_src, "parsed media url");
         let (media_pl_bytes, media_pl) = self.get_media_playlist(&media_pl_src).await?;
         tracing::debug!("parsed media playlist");
@@ -435,7 +434,7 @@ impl InnerDownloader {
             .send()
             .await?
             .error_for_status()?
-            .json()
+            .json_or_log()
             .await?;
 
         self.device_id.set(Some(device_id.into_device_id()));
@@ -471,7 +470,7 @@ impl InnerDownloader {
             .send()
             .await?
             .error_for_status()?
-            .json::<DirectDataResponseBody<Token, TokenError>>()
+            .json_or_log::<DirectDataResponseBody<Token, TokenError>>()
             .await?
             .into_result()?;
         // let token_text = self
@@ -586,28 +585,46 @@ impl InnerDownloader {
         Err(EpisodeDownloadError::AdsTimeout)
     }
 
-    async fn get_playlist(&self) -> EpisodeDownloadResult<PlaylistSrc> {
-        let url = format!(
-            "{ORIGIN}/ajax/m3u8.php?sn={}&device={}",
-            self.sn,
-            self.device_id
-                .get_cloned()
-                .ok_or(EpisodeDownloadError::DeviceIdMissing)?
-        );
+    async fn get_playlist_src(&self) -> EpisodeDownloadResult<String> {
+        let mut url = Url::parse(API_ORIGIN)?;
+        url.set_path("anime/v1/video_src.php");
+        url.query_pairs_mut()
+            .append_pair("videoSn", &self.sn.to_string())
+            .append_pair(
+                "deviceid",
+                &self
+                    .device_id
+                    .get_cloned()
+                    .ok_or(EpisodeDownloadError::DeviceIdMissing)?,
+            )
+            // TODO we do not know function of this field, find it!
+            .append_pair("deviceTypeUseCases", "1");
 
-        let playlist = self
+        let video_src = self
             .request_client
             .get(url, true)
             .header(REFERER, get_referer(self.sn))
             .send()
             .await?
             .error_for_status()?
-            .json::<DirectDataResponseBody<PlaylistSrc, String>>()
+            .json_or_log::<CommonResponseBody<VideoSrc, String>>()
             .await?
             .into_result()
             .map_err(EpisodeDownloadError::Api)?;
 
-        Ok(playlist)
+        self.device_id.set(Some(video_src.deviceid));
+        let playlist_src = video_src
+            .src_use_cases
+            .iter()
+            .find(|src_use_case| src_use_case.device_type == 1)
+            .ok_or(EpisodeDownloadError::PlaylistParseError(
+                "未找到播放清单地址".into(),
+            ))?
+            .src
+            .playlist
+            .clone();
+
+        Ok(playlist_src)
     }
 
     fn get_media_variant(&self, master_pl: MasterPlaylist) -> EpisodeDownloadResult<VariantStream> {
