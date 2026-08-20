@@ -4,10 +4,13 @@ use std::{
 };
 
 use ani_dock_core::{
-    DownloadStatusNotifier, EpisodeDownloadError, EpisodeDownloadEvent, EpisodeDownloader,
+    AnimeResolveError, AnimeResolver, DownloadStatusNotifier, EpisodeDownloadError,
+    EpisodeDownloadEvent, EpisodeDownloader,
 };
+use ani_dock_db::repository::AnimeRepository;
 use ani_dock_db::repository::DownloadQueueRepository;
 use indexmap::{IndexMap, map::Entry};
+use thiserror::Error;
 use tokio::{
     sync::{Semaphore, broadcast},
     time,
@@ -162,6 +165,33 @@ impl Downloader {
 pub struct DownloadStatus {
     pub sn: u32,
     pub state: DownloadState,
+}
+
+#[derive(Debug, Clone)]
+pub struct AnimeImporter {
+    anime_repo: AnimeRepository,
+    resolver: AnimeResolver,
+}
+
+impl AnimeImporter {
+    pub fn new(repo: AnimeRepository, resolver: AnimeResolver) -> Self {
+        Self {
+            anime_repo: repo,
+            resolver,
+        }
+    }
+
+    pub async fn import_anime(&self, sn: u32) -> Result<(), ImportAnimeError> {
+        let anime = self.resolver.from_episode_sn(sn).await?;
+        todo!();
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum ImportAnimeError {
+    #[error(transparent)]
+    Resolve(#[from] AnimeResolveError),
 }
 
 #[cfg(test)]

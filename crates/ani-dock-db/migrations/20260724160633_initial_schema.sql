@@ -61,3 +61,15 @@ CREATE TABLE IF NOT EXISTS download_queue (
 
 CREATE INDEX IF NOT EXISTS idx_download_queue_downloaded
 ON download_queue(downloaded);
+
+CREATE TABLE IF NOT EXISTS anime_cover (
+  id TEXT PRIMARY KEY NOT NULL,
+  -- url of this cover image, for distinct
+  url TEXT NOT NULL,
+  -- url image data
+  bytes BYTE NOT NULL,
+  mime_type TEXT NOT NULL
+
+  create_at TEXT NOT NULL,
+  update_at TEXT NOT NULL
+);
