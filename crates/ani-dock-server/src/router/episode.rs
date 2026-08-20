@@ -55,7 +55,6 @@ pub async fn download(
     Ok(StatusCode::ACCEPTED)
 }
 
-// TODO reserve order
 pub async fn restore_download_list(State(state): State<AppState>) -> ApiResult {
     let undownloaded_animes = state.db.anime.select_by_download_status(false).await?;
 
@@ -99,7 +98,6 @@ pub struct DownloadEvent {
 }
 
 impl DownloadEvent {
-    // TODO cache
     pub async fn from_download_status(
         ds: DownloadStatus,
         repo: &EpisodeRepository,
@@ -120,7 +118,6 @@ pub async fn download_events(
 
     let snapshot = state.services.download.state_snapshot();
 
-    // TODO use cache to reduce query
     let snapshot = try_join_all(
         snapshot
             .into_iter()

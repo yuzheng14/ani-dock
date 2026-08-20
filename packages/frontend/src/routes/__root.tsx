@@ -20,11 +20,9 @@ import { HardDriveDownload, LibraryBig, Settings } from 'lucide-react'
 import { useEffect, type CSSProperties } from 'react'
 import { toast } from '@/components/ui/toast'
 
-// TODO health check
 function AppSidebar() {
   const { setOpenMobile } = useSidebar()
 
-  // TODO move this to server?
   useEffect(() => {
     fetch('/api/episodes/download/restore', {
       method: 'POST',

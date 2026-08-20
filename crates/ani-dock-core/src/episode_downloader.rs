@@ -122,7 +122,6 @@ pub enum EpisodeDownloadError {
     #[error("播放清单解析错误：{0}")]
     PlaylistParseError(String),
 
-    // TODO 删除，上层自定义错误类型
     /// 供上层使用
     #[error("获取下载器并发锁失败")]
     AcquireSemaphore,
@@ -259,8 +258,6 @@ impl InnerDownloader {
 
         self.notifier
             .notify(EpisodeDownloadEvent::ResolveMediaResource);
-        // FIXME it seems like that ani gamer doesn't use this api now. detailed api url is inside
-        // this method
         let playlist = self.get_playlist().await?;
 
         let src = playlist.src();
@@ -531,7 +528,6 @@ impl InnerDownloader {
     }
 
     async fn start_ad(&self) -> EpisodeDownloadResult {
-        // TODO s=194699 is ad's id, real logic will rotate this
         let url = format!("{ORIGIN}/ajax/videoCastcishu.php?sn={}&s=194699", self.sn);
 
         self.request_client
@@ -584,7 +580,6 @@ impl InnerDownloader {
                 continue;
             }
 
-            // TODO modify ads_time in config, then write to file
             return Ok(());
         }
 
@@ -592,28 +587,6 @@ impl InnerDownloader {
     }
 
     async fn get_playlist(&self) -> EpisodeDownloadResult<PlaylistSrc> {
-        // FIXME it seems like using
-        // https://api.gamer.com.tw/anime/v1/video_src.php?videoSn=49953&deviceid=0118ddf4664ceba5c04a12aec5025b4d7c93819911f881586a5a65f00630&deviceTypeUseCases=1
-        // now
-        //
-        // response:
-        // {
-        //     "data": {
-        //         "deviceid": "<deviceid>",
-        //         "srcUseCases": [
-        //             {
-        //                 "deviceType": 1,
-        //                 "src": {
-        //                     "playlist": "<playlist url>"
-        //                 }
-        //             }
-        //         ]
-        //     }
-        // }
-        //
-        // request: videoSn=50518&deviceid=0343eaec37788016bd37175ef8a0ced9be8d4fa75ba88e186a832f321614&deviceTypeUseCases=1
-        //
-        // also save device_id, this will change device_id
         let url = format!(
             "{ORIGIN}/ajax/m3u8.php?sn={}&device={}",
             self.sn,

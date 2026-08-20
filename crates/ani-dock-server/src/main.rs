@@ -12,9 +12,6 @@ use ani_dock_server::{
 use axum::serve;
 use tracing_subscriber::EnvFilter;
 
-// TODO shutdown gracefully
-// FIXME if there is no cookie, it should be restart to download as guest otherwise it will be 404
-// on media playlist
 async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(

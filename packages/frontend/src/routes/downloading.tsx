@@ -34,7 +34,6 @@ function DownloadStatus({ de }: { de: DownloadEvent }) {
     )
   }
 
-  // TODO notify cooldown time
   switch (de.state.Ok.type) {
     case 'PENDING': {
       return '排队中'
@@ -68,7 +67,6 @@ function DownloadStatus({ de }: { de: DownloadEvent }) {
     case 'FINALIZING': {
       return '收尾中'
     }
-    // TODO distinguish completed and uncompleted to different tab
     case 'COMPLETED': {
       return '下载完成'
     }
@@ -113,7 +111,6 @@ function RouteComponent() {
               />
             </ItemMedia>
             <ItemContent>
-              {/* TODO display name */}
               <ItemTitle className="line-clamp-1">
                 第 {de.episode.episode} 集 - {de.episode.sn}
               </ItemTitle>
@@ -123,7 +120,6 @@ function RouteComponent() {
             </ItemContent>
           </Item>
         ))}
-        {/* TODO add control button groups */}
       </ItemGroup>
     </div>
   )
@@ -137,7 +133,6 @@ function useDownloadEvent() {
   const downloadEvents = Array.from(downloadEventMap.values())
 
   useEffect(() => {
-    // TODO handle error event
     const es = new EventSource('/api/episodes/download/events')
     function snapshotHandler(this: EventSource, ev: MessageEvent) {
       const dataEvents = JSON.parse(ev.data) as DownloadEvent[]

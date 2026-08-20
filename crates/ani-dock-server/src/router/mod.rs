@@ -41,7 +41,6 @@ pub struct AppState {
 }
 
 pub fn get_app_router(app_state: AppState) -> Router {
-    // TODO split into concrete router file
     let api_router = Router::new()
         .route("/health", get(health))
         .route("/animes", get(select_animes).post(import_anime))

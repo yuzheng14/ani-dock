@@ -85,7 +85,6 @@ async fn update_settings(
     config.write_config().await?;
     *state.config.lock().unwrap() = config.clone();
 
-    // FIXME state is cloned, so modify cookie here will not influence global state
     state
         .cookie
         .set_and_write_cookie(settings.cookie.0.clone())

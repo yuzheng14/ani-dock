@@ -175,7 +175,6 @@ function DownloadButton({ anime }: { anime: Anime }) {
           </DialogDescription>
         </DialogHeader>
         <FieldGroup>
-          {/* TODO add select all or otherwise */}
           {Object.entries(anime.series).map(([name, episodes]) => (
             <Field key={name}>
               <FieldLabel>{name}</FieldLabel>
@@ -207,7 +206,6 @@ function DownloadButton({ anime }: { anime: Anime }) {
         {mutation.isError && (
           <p className="text-sm text-destructive">{mutation.error.message}</p>
         )}
-        {/* TODO add selected reminder */}
         <DialogFooter>
           <DialogClose render={<Button variant={'outline'} />}>
             取消
@@ -290,7 +288,6 @@ function RouteComponent() {
 
   return (
     <div className="size-full pr-2 pb-2">
-      {/* TODO 增加左侧搜索框等 */}
       <div className="mb-4 flex items-center justify-between">
         <p className="text-muted-foreground">共 {data.length} 部动画</p>
         <AddAnimeButton />
@@ -309,7 +306,6 @@ function RouteComponent() {
               </ItemHeader>
               <ItemContent>
                 <ItemTitle>{anime.name}</ItemTitle>
-                {/* TODO 增加简介 */}
                 <ItemDescription>暂无简介</ItemDescription>
               </ItemContent>
               <ItemActions>
