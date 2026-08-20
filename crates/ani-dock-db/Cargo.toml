@@ -18,8 +18,5 @@ sqlx = {
   ]
 }
 tokio = { workspace = true }
-ts-rs = {
-  workspace = true,
-  features = ["chrono-impl", "indexmap-impl", "uuid-impl"]
-}
+ts-rs = { workspace = true, features = ["chrono-impl", "indexmap-impl", "uuid-impl"] }
 uuid = { workspace = true, features = ["serde", "v7"] }
