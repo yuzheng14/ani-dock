@@ -36,7 +36,7 @@ check: typos cargo-check nextest prettier-check typecheck lint
 
 # 运行 rust 的 e2e 测试，需要真实的 cookie
 test-e2e:
-  RUST_LOG=ani_dock_core=debug cargo nextest run -p e2e --profile e2e --no-capture
+  RUST_LOG=info,ani_dock_core=debug cargo nextest run -p e2e --profile e2e --no-capture
 
 # 更新 git 钩子
 renew-git-hook:

@@ -666,6 +666,7 @@ version = "0.1.0"
 dependencies = [
  "ani-dock-core",
  "tokio",
+ "tracing",
  "tracing-subscriber",
 ]
 
