@@ -1,4 +1,4 @@
-/target
+target
 aniGamerPlus
 
 report.html
@@ -8,3 +8,6 @@ report.html
 
 node_modules
 .pnpm-store
+
+# worktrees
+.wt
