@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            cmake \
+            ffmpeg \
+            libclang-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.97.0
+        with:
+          components: rustfmt
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install development tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just,nextest,tombi,typos
+          fallback: none
+
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@v2
+        with:
+          version: 11.18.0
+          runtime: node@24
+          cache: true
+          install: false
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run checks
+        run: just check
+
+      - name: Check release build
+        run: cargo check --locked --release --workspace --all-targets
+
+  docker:
+    name: Docker
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      ANI_DOCK_IMAGE: ani-dock:ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: ani-dock:ci
+          cache-from: type=gha,scope=ani-dock
+          cache-to: type=gha,mode=max,scope=ani-dock
+
+      - name: Start container
+        run: docker compose up --detach --no-build
+
+      - name: Verify container health
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --output /dev/null \
+              http://127.0.0.1:6789/api/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "::error::Container did not become healthy after ${attempt} attempts"
+          docker compose ps
+          curl --fail --show-error http://127.0.0.1:6789/api/health
+
+      - name: Show container logs
+        if: failure()
+        run: docker compose logs --no-color || true
+
+      - name: Stop container
+        if: always()
+        run: docker compose down --volumes
