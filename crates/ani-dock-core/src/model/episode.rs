@@ -1,4 +1,3 @@
-// TODO include details directly
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Episode {
     /// sn of this episode

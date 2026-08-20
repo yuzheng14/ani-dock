@@ -23,7 +23,6 @@ pub struct Anime {
 pub struct Episode {
     pub id: Uuid,
     pub sn: u32,
-    // TODO save image bytes into db
     pub cover: String,
     pub episode: u32,
 

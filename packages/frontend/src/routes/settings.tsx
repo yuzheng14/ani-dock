@@ -106,7 +106,6 @@ function RouteComponent() {
             <Alert>
               <CircleCheck />
               <AlertTitle>更新成功</AlertTitle>
-              {/* TODO add tooltip to indicate docker container and app */}
               <AlertDescription>
                 如果更新了 cookie/ua/代理，请重启后端
               </AlertDescription>
@@ -123,7 +122,6 @@ function RouteComponent() {
           </Field>
         )}
 
-        {/* TODO group */}
         <Field>
           <FieldLabel htmlFor="cookie">Cookie</FieldLabel>
           <Input

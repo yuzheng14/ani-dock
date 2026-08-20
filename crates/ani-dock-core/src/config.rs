@@ -61,7 +61,6 @@ impl Display for DownloadResolution {
     }
 }
 
-// TODO maybe remove sn_list and this?
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum DownloadMode {
@@ -194,7 +193,6 @@ pub struct Config {
     // pub video_filename_extension: VideoPackageExtension,
     // /// 剧集名补零，填写补足位数，例: 填写 2 剧集名称为 01，填写 3 剧集名称为 001。默认值为 1。
     // pub zerofill: u32,
-    // TODO maybe only select browser
     /// 请求UA，需要和获取cookie的浏览器相同
     pub ua: String,
     // /// 代理开关
@@ -228,7 +226,6 @@ pub struct Config {
     // TODO 暂不支持正则，英文区分大小写 （(支持python的正则表达式、英文不区分大小写)）
     // /// 额外过滤弹幕关键字。默认值为空。
     // pub danmu_ban_words: Vec<String>,
-    // TODO 暂不实现
     // /// 是否检查更新。默认值为 true。
     // pub check_latest_version: bool,
     // /// 是否在检查更新时读取 `sn_list.txt`, 开启后对 `sn_list.txt` 的更改将会在下次检查更新时生效而不用重启程序。默认值为 true。
@@ -244,7 +241,6 @@ pub struct Config {
     // pub use_dashboard: bool,
     // /// Web控制面板配置
     // pub dashboard: Dashboard,
-    // TODO using this to save to file
     // /// 是否記錄日志, 一天一個日志
     // pub save_logs: bool,
     // /// 日志保留数量, 正整数值, 必须大于等于 1, 默认值为 7。
