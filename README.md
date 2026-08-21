@@ -12,6 +12,10 @@
   <a href="https://github.com/yuzheng14/ani-dock/pkgs/container/ani-dock"><img src="https://img.shields.io/badge/container-ghcr.io-blue" alt="Container image"></a>
 </p>
 
+<p align="center">
+  English · <a href="./README.zh-CN.md">简体中文</a> · <a href="./README.zh-TW.md">繁體中文</a>
+</p>
+
 Paste an AniGamer episode SN, choose the episodes you want, and let AniDock
 handle the rest.
 
