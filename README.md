@@ -2,65 +2,220 @@
   <img src="./assets/logo.png" alt="AniDock logo" width="240">
 </p>
 
+<h1 align="center">AniDock</h1>
+
 <p align="center">Your Anime, docked at home.</p>
 
-# AniDock
+<p align="center">
+  <a href="https://github.com/yuzheng14/ani-dock/actions/workflows/ci.yml"><img src="https://github.com/yuzheng14/ani-dock/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/yuzheng14/ani-dock/releases/latest"><img src="https://img.shields.io/github/v/release/yuzheng14/ani-dock" alt="Latest release"></a>
+  <a href="https://github.com/yuzheng14/ani-dock/pkgs/container/ani-dock"><img src="https://img.shields.io/badge/container-ghcr.io-blue" alt="Container image"></a>
+</p>
 
-An opinionated human-like local-first anime downloader from ani gamer.
+AniDock is an opinionated, local-first AniGamer downloader with a self-hosted
+web interface. Import a series from any episode SN, select the episodes you
+want, and follow their download progress from your browser.
+
+> [!NOTE]
+> AniDock is an early-stage `0.x` project. Configuration and behavior may
+> change between releases.
+
+> [!CAUTION]
+> AniDock is intended for personal use only. You are responsible for complying
+> with AniGamer's Terms of Service and applicable laws. AniDock is not
+> affiliated with or endorsed by AniGamer.
 
 > [!WARNING]
-> AniDock is under active development. The core parsing and download
-> engine is working, but the desktop client and Docker server have
-> not been released yet.
+> AniDock has no built-in authentication. Keep the default loopback binding and
+> do not expose it directly to the public internet. The Cookie stored by
+> AniDock is an account credential; never share it or include it in logs or
+> issue reports.
 
-> [!WARNING]
-> This is only for personal use, user should obey ani gamer's Terms
-> of Service or local laws.
+## Features
 
-## Getting Started
+- Self-hosted web interface for configuration, library management, and
+  download monitoring.
+- Import a complete series using the SN from any episode.
+- Select episodes and track queue, preparation, download, merge, and error
+  states in real time.
+- Persist the library, unfinished download queue, Cookie, configuration, and
+  downloaded files locally.
+- Resume unfinished downloads after a restart.
+- Configure resolution, resolution locking, VIP-only downloads, segmented
+  download concurrency, ad wait time, User-Agent, and proxy.
+- Schedule downloads sequentially with a human-like cooldown.
+- Run on `linux/amd64` and `linux/arm64` with FFmpeg included in the container
+  image.
 
-AniDock now does not provide desktop client and Docker server yet.
-You can only add this as a git dependency using cargo, then use api
-in this crate.
+## Quick start
 
-Prerequisites:
+### Requirements
 
-- ffmpeg installed which is configure in PATH.
+- Docker Engine or Docker Desktop.
+- Docker Compose v2 when using the Compose instructions.
+- Access to AniGamer from the machine running AniDock.
 
-```rust
-use std::{
-    error::Error,
-    sync::{Arc, Mutex},
-};
+### Start with Docker Compose
 
-use ani_dock::{Anime, Config, Cookie, DeviceId, RequestClient};
-use tokio::fs;
+```bash
+git clone https://github.com/yuzheng14/ani-dock.git
+cd ani-dock
 
-async fn download_3499() -> Result<(), Box<dyn Error>> {
-    let device_id = DeviceId::default();
-    // config AniDock
-    let config = Arc::new(Mutex::new(Config::default()));
-    // use your cookie
-    let cookie = Cookie::new(cookie_string);
-    let request_client = Arc::new(RequestClient::new(&config.lock().unwrap(), &cookie)?);
-
-    // resolve anime from one of its episode's sn
-    let anime = Anime::from_episode_sn(3499, device_id, request_client, config).await?;
-
-    // choose first episode to download
-    anime
-        .episodes()
-        .first()
-        .unwrap()
-        .1
-        .first()
-        .unwrap()
-        .download()
-        .await?;
-
-    Ok(())
-}
+export ANI_DOCK_IMAGE=ghcr.io/yuzheng14/ani-dock:latest
+docker compose pull ani-dock
+docker compose up --detach --no-build
 ```
+
+### Start with Docker
+
+Docker Compose is not required. You can run the published image directly:
+
+```bash
+docker volume create ani-dock-data
+
+docker run --detach \
+  --name ani-dock \
+  --restart unless-stopped \
+  --init \
+  --read-only \
+  --tmpfs /tmp \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --stop-timeout 30 \
+  --publish 127.0.0.1:6789:6789 \
+  --volume ani-dock-data:/home/anidock/.ani-dock \
+  ghcr.io/yuzheng14/ani-dock:latest
+```
+
+Open <http://127.0.0.1:6789> after the container becomes healthy.
+
+Use a version tag such as `0.1.0` instead of `latest` if you want reproducible
+deployments. Available tags are listed on the
+[Releases](https://github.com/yuzheng14/ani-dock/releases) page.
+
+### Store data in a host directory
+
+By default, Compose stores all application data in the `ani-dock-data` named
+volume. To make the downloaded files directly accessible on the host, set the
+volume source before the first start:
+
+```bash
+mkdir -p ./data
+
+# Required on Linux when the directory is not writable by container UID 10001.
+sudo chown -R 10001:10001 ./data
+
+export ANI_DOCK_VOLUMES=./data
+export ANI_DOCK_IMAGE=ghcr.io/yuzheng14/ani-dock:latest
+docker compose up --detach --no-build
+```
+
+You can place `ANI_DOCK_IMAGE` and `ANI_DOCK_VOLUMES` in the repository's
+`.env` file instead of exporting them for every shell session.
+
+For a direct Docker deployment, replace
+`--volume ani-dock-data:/home/anidock/.ani-dock` in the `docker run` command
+with `--volume "$(pwd)/data:/home/anidock/.ani-dock"`.
+
+## First-time setup
+
+1. Open **Settings** in AniDock.
+2. If you want to use an authenticated account, copy the `Cookie` request
+   header from an authenticated AniGamer browser request and enter the same
+   browser's User-Agent. Keep both values private.
+3. Configure the desired resolution, proxy, and download behavior, then save.
+   Follow the restart instructions shown by AniDock when required.
+4. Open **Library**, choose **Add Anime**, and enter the numeric `sn` from an
+   AniGamer episode URL, for example `animeVideo.php?sn=3499`.
+5. Select the episodes to download and monitor them on the **Downloading**
+   page.
+
+## Data and downloads
+
+The persistent volume is mounted at `/home/anidock/.ani-dock` in the container
+and contains:
+
+| Path | Contents |
+| --- | --- |
+| `config.toml` | Application configuration. |
+| `cookie.txt` | AniGamer Cookie. Treat this file as a secret. |
+| `data.db` | Library and download queue database. |
+| `bangumi/` | Completed video files, grouped by series and season. |
+| `tmp/` | Temporary download files. |
+
+Back up the persistent volume or host directory before replacing or removing
+it.
+
+## Container operations
+
+### Docker Compose
+
+```bash
+# View status and health
+docker compose ps
+
+# Follow logs
+docker compose logs --follow ani-dock
+
+# Restart the service
+docker compose restart ani-dock
+
+# Stop the application without deleting persistent data
+docker compose down
+```
+
+### Docker
+
+```bash
+# View status and health
+docker ps --filter name=ani-dock
+
+# Follow logs
+docker logs --follow ani-dock
+
+# Restart the container
+docker restart ani-dock
+
+# Stop the container without deleting persistent data
+docker stop ani-dock
+```
+
+To update a deployment that uses the published image:
+
+```bash
+git pull --ff-only
+docker compose pull ani-dock
+docker compose up --detach --no-build
+```
+
+Keep `ANI_DOCK_IMAGE` and `ANI_DOCK_VOLUMES` exported or saved in `.env` while
+running these commands.
+
+For a direct Docker deployment, pull the new image, remove the old container,
+and repeat the `docker run` command above. The named volume is not deleted when
+the container is removed:
+
+```bash
+docker pull ghcr.io/yuzheng14/ani-dock:latest
+docker stop ani-dock
+docker rm ani-dock
+```
+
+## Build from source
+
+The Docker build contains the frontend, Rust server, FFmpeg, and all runtime
+dependencies:
+
+```bash
+ANI_DOCK_IMAGE=ani-dock:local docker compose up --detach --build
+```
+
+## Reporting issues
+
+[Open an issue](https://github.com/yuzheng14/ani-dock/issues/new) with the
+AniDock version or image tag, deployment method, reproduction steps, and
+relevant logs. Remove Cookies, tokens, account identifiers, and other sensitive
+values before posting logs publicly.
 
 ## Acknowledgements
 
