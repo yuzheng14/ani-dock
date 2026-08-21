@@ -1,72 +1,26 @@
-# 检查所有 just 配方
-default:
-  @just --list
+# 未指定命令时列出顶层子命令
+set default-list
 
-# 初始化数据库
-setup-db:
-  cargo sqlx db setup --source crates/ani-dock-db/migrations
+# 初始化开发环境
+mod setup '.just/setup.just'
 
-# 重置数据库
-reset-db:
-  cargo sqlx db reset --source crates/ani-dock-db/migrations
+# 数据库相关命令
+mod db '.just/db.just'
 
-# 运行后端服务
-run-server:
-  cargo run -p ani-dock-server
+# 启动开发服务
+mod dev '.just/dev.just'
 
-# 执行 nextest 以运行 rust 侧单测
-nextest +args="":
-  cargo nextest run --workspace {{args}}
+# 构建项目
+mod build '.just/build.just'
 
-# 从 rust 类型生成 ts 类型
-gen-type:
-  cargo nextest run --ignore-default-filter export_bindings
-  pnpm -F @ani-dock/frontend exec prettier --write ../shared-type/types
+# 检查代码质量
+mod check '.just/check.just'
 
-cargo-check:
-  cargo check --all-targets --workspace
+# 运行测试
+mod test '.just/test.just'
 
-typos:
-  typos
+# 生成代码
+mod generate '.just/generate.just'
 
-# 检查所有的 rust ts 检查，包含格式化 lint 单测
-check: typos cargo-check nextest prettier-check typecheck lint
-  tombi fmt --check
-  cargo fmt --check
-
-# 运行 rust 的 e2e 测试，需要真实的 cookie
-test-e2e:
-  RUST_LOG=info,ani_dock_core=debug cargo nextest run -p e2e --profile e2e --no-capture
-
-# 更新 git 钩子
-renew-git-hook:
-  git config --local core.hooksPath .git-hooks
-
-# 初始化开发环境及检查，刚 clone 后必须执行通过此指令
-@setup: renew-git-hook
-  typos --version || echo "请使用 brew install typos-cli 安装 typos 用于拼写检查"
-  tombi --version || echo "请使用 brew install tombi 安装 tombi 用于 toml 文件格式化"
-  sqlx --version && just setup-db || echo "请使用 brew install sqlx-cli 安装 sqlx 用于数据库相关操作"
-
-# 运行 prettier 检查前端代码格式化
-prettier-check:
-  pnpm -F @ani-dock/frontend exec prettier --check .
-
-# 运行前端代码的类型检查
-typecheck:
-  pnpm -F @ani-dock/frontend exec tsc -b --noEmit
-
-# 使用 oxlint 检查前端代码
-lint:
-  pnpm -F @ani-dock/frontend exec oxlint --deny-warnings
-
-# 启动前端开发服务器
-dev-fe:
-  pnpm -F @ani-dock/frontend dev
-
-# 构建前端
-build-fe:
-  pnpm -F @ani-dock/frontend build
-
-add-shadcn-component component-name:
-  pnpm -F @ani-dock/frontend exec shadcn add {{component-name}}
+# 管理前端 UI 组件
+mod ui '.just/ui.just'
