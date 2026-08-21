@@ -10,6 +10,11 @@ on:
         description: Existing release tag to republish, for example v0.1.0
         required: true
         type: string
+      test_mode:
+        description: Publish only a temporary CI tag
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -76,7 +81,8 @@ jobs:
           flavor: |
             latest=false
           tags: |
-            type=semver,pattern={{version}},value=${{ env.RELEASE_TAG }}
+            type=raw,value=ci-${{ env.RELEASE_TAG }}-${{ github.run_id }},enable=${{ github.event_name == 'workflow_dispatch' && inputs.test_mode }}
+            type=semver,pattern={{version}},value=${{ env.RELEASE_TAG }},enable=${{ github.event_name != 'workflow_dispatch' || inputs.test_mode == false }}
             type=semver,pattern={{major}}.{{minor}},value=${{ env.RELEASE_TAG }},enable=${{ github.event_name == 'release' && !github.event.release.prerelease }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' && !github.event.release.prerelease }}
 
