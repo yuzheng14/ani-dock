@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 bytes = "1.12.1"
 directories = "6.0.0"
-domparser = "0.0.7"
 futures = { workspace = true }
 indexmap = { workspace = true, features = ["serde"] }
 m3u8-rs = "6.0.0"
