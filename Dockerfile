@@ -79,6 +79,8 @@ RUN groupadd --gid 10001 anidock && \
 
 WORKDIR /app
 
+COPY LICENSE /licenses/ani-dock/LICENSE
+
 COPY --from=backend \
   --chown=10001:10001 \
   /src/target/release/ani-dock-server \
@@ -106,4 +108,3 @@ HEALTHCHECK \
   CMD ["curl", "-fsS", "http://127.0.0.1:6789/api/health"]
 
 CMD ["/app/ani-dock-server"]
-
