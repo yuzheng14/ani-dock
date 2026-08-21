@@ -25,10 +25,15 @@ env:
   RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
 
 jobs:
-  publish:
-    name: Publish
+  prepare:
+    name: Prepare
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 10
+
+    outputs:
+      annotations: ${{ steps.metadata.outputs.annotations }}
+      json: ${{ steps.metadata.outputs.json }}
+      labels: ${{ steps.metadata.outputs.labels }}
 
     steps:
       - name: Validate release tag
@@ -56,21 +61,6 @@ jobs:
             exit 1
           fi
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-        with:
-          platforms: arm64
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Generate image metadata
         id: metadata
         uses: docker/metadata-action@v6
@@ -84,14 +74,146 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},value=${{ env.RELEASE_TAG }},enable=${{ github.event_name == 'release' && !github.event.release.prerelease }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' && !github.event.release.prerelease }}
 
-      - name: Build and push image
+  build:
+    name: Build ${{ matrix.arch }}
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout release
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image by digest
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.metadata.outputs.tags }}
-          labels: ${{ steps.metadata.outputs.labels }}
-          annotations: ${{ steps.metadata.outputs.annotations }}
-          cache-from: type=gha,scope=ani-dock
-          cache-to: type=gha,mode=max,scope=ani-dock
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          labels: ${{ needs.prepare.outputs.labels }}
+          annotations: ${{ needs.prepare.outputs.annotations }}
+          cache-from: type=gha,scope=ani-dock-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=ani-dock-${{ matrix.arch }}
+
+      - name: Export image digest
+        shell: bash
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          if [[ ! "${IMAGE_DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Invalid image digest: ${IMAGE_DIGEST}"
+            exit 1
+          fi
+
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${IMAGE_DIGEST#sha256:}"
+
+      - name: Upload image digest
+        uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    name: Publish manifest
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Download image digests
+        uses: actions/download-artifact@v8
+        with:
+          pattern: digests-*
+          path: /tmp/digests
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push image manifest
+        id: manifest
+        shell: bash
+        env:
+          IMAGE_METADATA: ${{ needs.prepare.outputs.json }}
+        run: |
+          mapfile -t digests < <(find /tmp/digests -maxdepth 1 -type f -printf '%f\n' | sort)
+          if [ "${#digests[@]}" -ne 2 ]; then
+            echo "::error::Expected 2 image digests, found ${#digests[@]}"
+            exit 1
+          fi
+
+          tag_args=()
+          first_tag=""
+          mapfile -t tags < <(jq -r '.tags[]' <<< "${IMAGE_METADATA}")
+          for tag in "${tags[@]}"; do
+            tag_args+=(--tag "${tag}")
+            if [ -z "${first_tag}" ]; then
+              first_tag="${tag}"
+            fi
+          done
+
+          annotation_args=()
+          mapfile -t annotations < <(
+            jq -r '.labels | to_entries[] | "\(.key)=\(.value)"' <<< "${IMAGE_METADATA}"
+          )
+          for annotation in "${annotations[@]}"; do
+            annotation_args+=(--annotation "index:${annotation}")
+          done
+
+          source_args=()
+          for digest in "${digests[@]}"; do
+            if [[ ! "${digest}" =~ ^[0-9a-f]{64}$ ]]; then
+              echo "::error::Invalid image digest: ${digest}"
+              exit 1
+            fi
+            source_args+=("${REGISTRY}/${IMAGE_NAME}@sha256:${digest}")
+          done
+
+          docker buildx imagetools create \
+            "${tag_args[@]}" \
+            "${annotation_args[@]}" \
+            "${source_args[@]}"
+
+          echo "tag=${first_tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Inspect published image
+        env:
+          IMAGE_TAG: ${{ steps.manifest.outputs.tag }}
+        run: docker buildx imagetools inspect "${IMAGE_TAG}"
