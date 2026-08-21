@@ -1,7 +1,5 @@
-# 检查所有 just 配方
-[private]
-default:
-    @just --list
+# 未指定命令时列出顶层子命令
+set default-list
 
 # 初始化开发环境
 mod setup '.just/setup.just'

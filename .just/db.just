@@ -1,8 +1,5 @@
 set working-directory := '..'
-
-[private]
-default:
-    @just --justfile "{{ justfile() }}" --list db
+set default-list
 
 # 初始化数据库
 setup:

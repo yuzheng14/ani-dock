@@ -1,8 +1,5 @@
 set working-directory := '..'
-
-[private]
-default:
-    @just --justfile "{{ justfile() }}" --list build
+set default-list
 
 # 构建前端
 frontend:

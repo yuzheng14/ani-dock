@@ -1,6 +1,7 @@
 set working-directory := '..'
 
 # 使用 cargo check 检查 Rust 代码
+[default]
 [private]
 default:
     cargo check --all-targets --workspace

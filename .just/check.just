@@ -7,12 +7,13 @@ mod rust 'check-rust.just'
 mod frontend 'check-frontend.just'
 
 # 检查所有 Rust 和 TypeScript 代码，包含格式化、lint 和单测
+[default]
 [private]
-default: typos rust::default _test-rust frontend::format frontend::types frontend::lint toml rust::format
+default: typos rust::default _test-rust frontend::default toml rust::format
 
 [private]
 _test-rust:
-    @just --justfile "{{ justfile() }}" test rust
+    cargo nextest run --workspace
 
 # 检查拼写
 typos:

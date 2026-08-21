@@ -1,8 +1,5 @@
 set working-directory := '..'
-
-[private]
-default:
-    @just --justfile "{{ justfile() }}" --list ui
+set default-list
 
 # 添加 shadcn/ui 组件
 add component-name:

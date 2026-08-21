@@ -1,8 +1,5 @@
 set working-directory := '..'
-
-[private]
-default:
-    @just --justfile "{{ justfile() }}" --list dev
+set default-list
 
 # 运行后端服务
 server:

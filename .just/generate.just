@@ -1,8 +1,5 @@
 set working-directory := '..'
-
-[private]
-default:
-    @just --justfile "{{ justfile() }}" --list generate
+set default-list
 
 # 从 Rust 类型生成 TypeScript 类型
 types:

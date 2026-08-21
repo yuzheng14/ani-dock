@@ -1,8 +1,5 @@
 set working-directory := '..'
-
-[private]
-default:
-    @just --justfile "{{ justfile() }}" --list test
+set default-list
 
 # 使用 nextest 运行 Rust 侧默认测试
 rust +args="":
