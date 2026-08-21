@@ -130,7 +130,7 @@ function RouteComponent() {
                     ；原生运行：重启 ani-dock 进程。
                   </>
                 ) : (
-                  '配置已生效，无需重启后端。'
+                  '配置已生效。'
                 )}
               </AlertDescription>
             </Alert>
