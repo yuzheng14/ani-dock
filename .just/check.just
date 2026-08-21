@@ -12,7 +12,7 @@ all: typos rust::cargo _test-rust frontend::all toml rust::format
 
 [private]
 _test-rust:
-    cargo nextest run --workspace
+    @"{{ just_executable() }}" --justfile "{{ justfile() }}" test rust
 
 # 检查拼写
 typos:
