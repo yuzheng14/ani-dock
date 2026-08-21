@@ -56,6 +56,8 @@ RUN --mount=type=cache,id=ani-dock-cargo-registry,target=/usr/local/cargo/regist
 # ============================================================
 FROM debian:trixie-slim AS runtime
 
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
 RUN apt update && \
   apt install -y --no-install-recommends \
   ca-certificates \
@@ -78,6 +80,8 @@ RUN groupadd --gid 10001 anidock && \
     /home/anidock/.ani-dock
 
 WORKDIR /app
+
+COPY LICENSE /licenses/ani-dock/LICENSE
 
 COPY --from=backend \
   --chown=10001:10001 \
@@ -106,4 +110,3 @@ HEALTHCHECK \
   CMD ["curl", "-fsS", "http://127.0.0.1:6789/api/health"]
 
 CMD ["/app/ani-dock-server"]
-
