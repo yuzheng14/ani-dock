@@ -144,7 +144,7 @@ For a direct Docker deployment, replace
 2. To use an authenticated account, copy the `Cookie` request header from an
    authenticated AniGamer browser request and enter the same browser's
    User-Agent. Keep both values private. Without an authenticated Cookie,
-   AniDock uses guest access and can download at most 360p.
+   AniDock uses guest access and can download only at 360p.
 3. Configure the desired resolution, proxy, and download behavior, then choose
    **提交**. Follow the restart instructions shown by AniDock when required.
 4. Open **所有动画**, choose **添加动画**, and enter the numeric `sn` from an
