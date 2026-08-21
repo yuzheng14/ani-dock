@@ -12,18 +12,43 @@
   <a href="https://github.com/yuzheng14/ani-dock/pkgs/container/ani-dock"><img src="https://img.shields.io/badge/container-ghcr.io-blue" alt="Container image"></a>
 </p>
 
-AniDock is an opinionated, local-first AniGamer downloader with a self-hosted
-web interface. Import a series from any episode SN, select the episodes you
-want, and follow their download progress from your browser.
+Paste an AniGamer episode SN, choose the episodes you want, and let AniDock
+handle the rest.
 
-> [!NOTE]
-> AniDock is an early-stage `0.x` project. Configuration and behavior may
-> change between releases.
+AniDock imports the entire anime, manages the download queue, and keeps
+everything on your own device through a self-hosted web interface.
 
-> [!CAUTION]
-> AniDock is intended for personal use only. You are responsible for complying
-> with AniGamer's Terms of Service and applicable laws. AniDock is not
-> affiliated with or endorsed by AniGamer.
+## How it works
+
+1. 🔎 **Paste an episode SN.** AniDock imports the entire anime.
+2. ✅ **Choose your episodes.** Select exactly what you want to download.
+3. 📥 **Follow the progress.** Watch each episode move through preparation,
+   download, and merge.
+
+## Features
+
+- 🖥️ **Manage everything from your browser.** Configure AniDock, organize your
+  library, and monitor downloads from a personal computer, NAS, or VPS.
+- 💾 **Keep your data close.** Store the library, unfinished queue, Cookie,
+  configuration, and downloaded files locally.
+- 🔄 **Pick up where you left off.** Resume unfinished downloads after a
+  restart.
+- ⚙️ **Download your way.** Tune resolution, resolution locking, VIP-only
+  downloads, segmented download concurrency, ad wait time, User-Agent, and
+  proxy settings.
+- ⏱️ **Leave the queue running.** Schedule downloads sequentially with a
+  human-like cooldown.
+- 🐳 **Deploy almost anywhere.** Run on `linux/amd64` and `linux/arm64` with
+  FFmpeg already included in the container image.
+
+## Before you start
+
+AniDock is an early-stage `0.x` project, so configuration and behavior may
+change between releases.
+
+AniDock is intended for personal use only. You are responsible for complying
+with AniGamer's Terms of Service and applicable laws. AniDock is not affiliated
+with or endorsed by AniGamer.
 
 > [!WARNING]
 > AniDock has no built-in authentication. Keep the default loopback binding and
@@ -31,22 +56,6 @@ want, and follow their download progress from your browser.
 > AniDock is an account credential; never share it or include it in logs or
 > issue reports. For remote access from a NAS or VPS, use a trusted private
 > network, VPN, or authenticated reverse proxy.
-
-## Features
-
-- 🖥️ Self-hosted web interface for configuration, library management, and
-  download monitoring on personal computers, NAS devices, and VPS instances.
-- 🔎 Import an entire anime using the SN of any episode.
-- 📥 Select episodes and track queue, preparation, download, merge, and error
-  states in real time.
-- 💾 Persist the library, unfinished download queue, Cookie, configuration, and
-  downloaded files locally.
-- 🔄 Resume unfinished downloads after a restart.
-- ⚙️ Configure resolution, resolution locking, VIP-only downloads, segmented
-  download concurrency, ad wait time, User-Agent, and proxy.
-- ⏱️ Schedule downloads sequentially with a human-like cooldown.
-- 🐳 Run on `linux/amd64` and `linux/arm64` with FFmpeg included in the container
-  image.
 
 ## Quick start
 
