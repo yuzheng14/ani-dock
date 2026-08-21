@@ -8,8 +8,7 @@ mod frontend 'check-frontend.just'
 
 # 检查所有 Rust 和 TypeScript 代码，包含格式化、lint 和单测
 [default]
-[private]
-default: typos rust::default _test-rust frontend::default toml rust::format
+all: typos rust::cargo _test-rust frontend::all toml rust::format
 
 [private]
 _test-rust:

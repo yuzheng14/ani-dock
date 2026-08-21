@@ -2,8 +2,7 @@ set working-directory := '..'
 
 # 检查所有前端代码
 [default]
-[private]
-default: format types lint
+all: format types lint
 
 # 运行 Prettier 检查前端代码格式
 format:
