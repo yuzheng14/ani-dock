@@ -95,15 +95,15 @@ curl -fsSL \
   https://raw.githubusercontent.com/yuzheng14/ani-dock/main/docker-compose.yaml \
   > docker-compose.yaml
 
-export ANI_DOCK_IMAGE=ghcr.io/yuzheng14/ani-dock:latest
 docker compose pull ani-dock
 docker compose up -d --no-build
 ```
 
 容器进入健康状态后，打开 <http://127.0.0.1:6789>。
 
-如果需要可复现的部署，请使用 `0.1.0` 之类的版本标签，而不是 `latest`。
-可用的镜像标签可以在
+Compose 文件默认使用 `ghcr.io/yuzheng14/ani-dock:latest`。如果需要
+可复现的部署，请将 `ANI_DOCK_IMAGE` 设为带版本标签的完整镜像名，例如
+`ghcr.io/yuzheng14/ani-dock:0.1.0`。可用的镜像标签可以在
 [容器软件包](https://github.com/yuzheng14/ani-dock/pkgs/container/ani-dock)
 页面查看。
 
@@ -131,12 +131,11 @@ sudo chown -R 10001:10001 ./data
 
 ```bash
 export ANI_DOCK_VOLUMES=./data
-export ANI_DOCK_IMAGE=ghcr.io/yuzheng14/ani-dock:latest
 docker compose up -d --no-build
 ```
 
-也可以将 `ANI_DOCK_IMAGE` 和 `ANI_DOCK_VOLUMES` 写入部署目录中的
-`.env` 文件，无需在每次打开 Shell 时重新导出。
+也可以将 `ANI_DOCK_IMAGE`、`ANI_DOCK_VOLUMES` 等 Compose 覆盖值写入
+部署目录中的 `.env` 文件，无需在每次打开 Shell 时重新导出。
 
 直接使用 Docker 部署时，将 `docker run` 命令中的
 `-v ani-dock-data:/home/anidock/.ani-dock` 替换为
@@ -214,8 +213,8 @@ docker compose pull ani-dock
 docker compose up -d --no-build
 ```
 
-运行这些命令时，请确保 `ANI_DOCK_IMAGE` 和 `ANI_DOCK_VOLUMES` 仍已导出，
-或已经保存在 `.env` 中。
+如果自定义了 `ANI_DOCK_IMAGE` 或 `ANI_DOCK_VOLUMES`，运行这些命令时
+请确保覆盖值仍已导出，或已经保存在 `.env` 中。
 
 直接使用 Docker 部署时，请拉取新镜像、删除旧容器，然后重新执行上面的
 `docker run` 命令。删除容器不会删除命名卷：

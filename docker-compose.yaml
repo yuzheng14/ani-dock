@@ -1,6 +1,6 @@
 services:
   ani-dock:
-    image: ${ANI_DOCK_IMAGE:-ani-dock:latest}
+    image: ${ANI_DOCK_IMAGE:-ghcr.io/yuzheng14/ani-dock:latest}
 
     build: .
 
