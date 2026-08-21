@@ -33,18 +33,18 @@ want, and follow their download progress from your browser.
 
 ## Features
 
-- Self-hosted web interface for configuration, library management, and
+- 🖥️ Self-hosted web interface for configuration, library management, and
   download monitoring.
-- Import a complete series using the SN from any episode.
-- Select episodes and track queue, preparation, download, merge, and error
+- 🔎 Import a complete series using the SN from any episode.
+- 📥 Select episodes and track queue, preparation, download, merge, and error
   states in real time.
-- Persist the library, unfinished download queue, Cookie, configuration, and
+- 💾 Persist the library, unfinished download queue, Cookie, configuration, and
   downloaded files locally.
-- Resume unfinished downloads after a restart.
-- Configure resolution, resolution locking, VIP-only downloads, segmented
+- 🔄 Resume unfinished downloads after a restart.
+- ⚙️ Configure resolution, resolution locking, VIP-only downloads, segmented
   download concurrency, ad wait time, User-Agent, and proxy.
-- Schedule downloads sequentially with a human-like cooldown.
-- Run on `linux/amd64` and `linux/arm64` with FFmpeg included in the container
+- ⏱️ Schedule downloads sequentially with a human-like cooldown.
+- 🐳 Run on `linux/amd64` and `linux/arm64` with FFmpeg included in the container
   image.
 
 ## Quick start
@@ -52,19 +52,8 @@ want, and follow their download progress from your browser.
 ### Requirements
 
 - Docker Engine or Docker Desktop.
-- Docker Compose v2 when using the Compose instructions.
+- Docker Compose v2 and curl when using the Compose instructions.
 - Access to AniGamer from the machine running AniDock.
-
-### Start with Docker Compose
-
-```bash
-git clone https://github.com/yuzheng14/ani-dock.git
-cd ani-dock
-
-export ANI_DOCK_IMAGE=ghcr.io/yuzheng14/ani-dock:latest
-docker compose pull ani-dock
-docker compose up --detach --no-build
-```
 
 ### Start with Docker
 
@@ -85,6 +74,23 @@ docker run --detach \
   --publish 127.0.0.1:6789:6789 \
   --volume ani-dock-data:/home/anidock/.ani-dock \
   ghcr.io/yuzheng14/ani-dock:latest
+```
+
+### Start with Docker Compose
+
+Only the Compose file is required; you do not need to clone the repository:
+
+```bash
+mkdir -p ani-dock
+cd ani-dock
+
+curl --fail --silent --show-error --location \
+  https://raw.githubusercontent.com/yuzheng14/ani-dock/main/docker-compose.yaml \
+  > docker-compose.yaml
+
+export ANI_DOCK_IMAGE=ghcr.io/yuzheng14/ani-dock:latest
+docker compose pull ani-dock
+docker compose up --detach --no-build
 ```
 
 Open <http://127.0.0.1:6789> after the container becomes healthy.
@@ -110,8 +116,8 @@ export ANI_DOCK_IMAGE=ghcr.io/yuzheng14/ani-dock:latest
 docker compose up --detach --no-build
 ```
 
-You can place `ANI_DOCK_IMAGE` and `ANI_DOCK_VOLUMES` in the repository's
-`.env` file instead of exporting them for every shell session.
+You can place `ANI_DOCK_IMAGE` and `ANI_DOCK_VOLUMES` in the deployment
+directory's `.env` file instead of exporting them for every shell session.
 
 For a direct Docker deployment, replace
 `--volume ani-dock-data:/home/anidock/.ani-dock` in the `docker run` command
@@ -183,7 +189,9 @@ docker stop ani-dock
 To update a deployment that uses the published image:
 
 ```bash
-git pull --ff-only
+curl --fail --silent --show-error --location \
+  https://raw.githubusercontent.com/yuzheng14/ani-dock/main/docker-compose.yaml \
+  > docker-compose.yaml
 docker compose pull ani-dock
 docker compose up --detach --no-build
 ```
@@ -207,6 +215,9 @@ The Docker build contains the frontend, Rust server, FFmpeg, and all runtime
 dependencies:
 
 ```bash
+git clone https://github.com/yuzheng14/ani-dock.git
+cd ani-dock
+
 ANI_DOCK_IMAGE=ani-dock:local docker compose up --detach --build
 ```
 
