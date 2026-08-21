@@ -1,2 +1,2 @@
 [files]
-extend-exclude = ["CHANGELOG.md", "tests/fixture/**"]
+extend-exclude = ["CHANGELOG.md"]
