@@ -29,13 +29,14 @@ want, and follow their download progress from your browser.
 > AniDock has no built-in authentication. Keep the default loopback binding and
 > do not expose it directly to the public internet. The Cookie stored by
 > AniDock is an account credential; never share it or include it in logs or
-> issue reports.
+> issue reports. For remote access from a NAS or VPS, use a trusted private
+> network, VPN, or authenticated reverse proxy.
 
 ## Features
 
 - 🖥️ Self-hosted web interface for configuration, library management, and
-  download monitoring.
-- 🔎 Import a complete series using the SN from any episode.
+  download monitoring on personal computers, NAS devices, and VPS instances.
+- 🔎 Import an entire anime using the SN of any episode.
 - 📥 Select episodes and track queue, preparation, download, merge, and error
   states in real time.
 - 💾 Persist the library, unfinished download queue, Cookie, configuration, and
@@ -62,7 +63,7 @@ Docker Compose is not required. You can run the published image directly:
 ```bash
 docker volume create ani-dock-data
 
-docker run --detach \
+docker run -d \
   --name ani-dock \
   --restart unless-stopped \
   --init \
@@ -71,70 +72,85 @@ docker run --detach \
   --cap-drop ALL \
   --security-opt no-new-privileges:true \
   --stop-timeout 30 \
-  --publish 127.0.0.1:6789:6789 \
-  --volume ani-dock-data:/home/anidock/.ani-dock \
+  -p 127.0.0.1:6789:6789 \
+  -v ani-dock-data:/home/anidock/.ani-dock \
   ghcr.io/yuzheng14/ani-dock:latest
 ```
 
 ### Start with Docker Compose
 
-Only the Compose file is required; you do not need to clone the repository:
+Only the Compose file is required; you do not need to clone the whole
+repository:
 
 ```bash
 mkdir -p ani-dock
 cd ani-dock
 
-curl --fail --silent --show-error --location \
+curl -fsSL \
   https://raw.githubusercontent.com/yuzheng14/ani-dock/main/docker-compose.yaml \
   > docker-compose.yaml
 
 export ANI_DOCK_IMAGE=ghcr.io/yuzheng14/ani-dock:latest
 docker compose pull ani-dock
-docker compose up --detach --no-build
+docker compose up -d --no-build
 ```
 
 Open <http://127.0.0.1:6789> after the container becomes healthy.
 
 Use a version tag such as `0.1.0` instead of `latest` if you want reproducible
-deployments. Available tags are listed on the
-[Releases](https://github.com/yuzheng14/ani-dock/releases) page.
+deployments. Available image tags are listed on the
+[container package](https://github.com/yuzheng14/ani-dock/pkgs/container/ani-dock)
+page.
 
 ### Store data in a host directory
 
-By default, Compose stores all application data in the `ani-dock-data` named
-volume. To make the downloaded files directly accessible on the host, set the
-volume source before the first start:
+Both deployment examples store all application data in the `ani-dock-data`
+named volume by default. To make the downloaded files directly accessible on
+the host, set the volume source before the first start:
 
 ```bash
 mkdir -p ./data
+```
 
-# Required on Linux when the directory is not writable by container UID 10001.
+The container runs as UID and GID `10001`. On Linux, make the directory
+writable by that user when necessary:
+
+```bash
 sudo chown -R 10001:10001 ./data
+```
 
+On a NAS without shell or `chown` access, grant UID `10001` write permission
+to the selected directory in the NAS management interface. You can also keep
+the named volume if the NAS does not expose Unix ownership controls.
+
+For Docker Compose, set the host directory and start the service:
+
+```bash
 export ANI_DOCK_VOLUMES=./data
 export ANI_DOCK_IMAGE=ghcr.io/yuzheng14/ani-dock:latest
-docker compose up --detach --no-build
+docker compose up -d --no-build
 ```
 
 You can place `ANI_DOCK_IMAGE` and `ANI_DOCK_VOLUMES` in the deployment
 directory's `.env` file instead of exporting them for every shell session.
 
 For a direct Docker deployment, replace
-`--volume ani-dock-data:/home/anidock/.ani-dock` in the `docker run` command
-with `--volume "$(pwd)/data:/home/anidock/.ani-dock"`.
+`-v ani-dock-data:/home/anidock/.ani-dock` in the `docker run` command with
+`-v "$(pwd)/data:/home/anidock/.ani-dock"`.
 
 ## First-time setup
 
-1. Open **Settings** in AniDock.
-2. If you want to use an authenticated account, copy the `Cookie` request
-   header from an authenticated AniGamer browser request and enter the same
-   browser's User-Agent. Keep both values private.
-3. Configure the desired resolution, proxy, and download behavior, then save.
-   Follow the restart instructions shown by AniDock when required.
-4. Open **Library**, choose **Add Anime**, and enter the numeric `sn` from an
+1. Open **设置** in AniDock.
+2. To use an authenticated account, copy the `Cookie` request header from an
+   authenticated AniGamer browser request and enter the same browser's
+   User-Agent. Keep both values private. Without an authenticated Cookie,
+   AniDock uses guest access and can download at most 360p.
+3. Configure the desired resolution, proxy, and download behavior, then choose
+   **提交**. Follow the restart instructions shown by AniDock when required.
+4. Open **所有动画**, choose **添加动画**, and enter the numeric `sn` from an
    AniGamer episode URL, for example `animeVideo.php?sn=3499`.
-5. Select the episodes to download and monitor them on the **Downloading**
-   page.
+5. Choose **下载**, select the episodes, choose **确认**, and monitor them on
+   the **下载列表** page.
 
 ## Data and downloads
 
@@ -161,7 +177,7 @@ it.
 docker compose ps
 
 # Follow logs
-docker compose logs --follow ani-dock
+docker compose logs -f ani-dock
 
 # Restart the service
 docker compose restart ani-dock
@@ -174,10 +190,10 @@ docker compose down
 
 ```bash
 # View status and health
-docker ps --filter name=ani-dock
+docker ps -f name=ani-dock
 
 # Follow logs
-docker logs --follow ani-dock
+docker logs -f ani-dock
 
 # Restart the container
 docker restart ani-dock
@@ -189,11 +205,11 @@ docker stop ani-dock
 To update a deployment that uses the published image:
 
 ```bash
-curl --fail --silent --show-error --location \
+curl -fsSL \
   https://raw.githubusercontent.com/yuzheng14/ani-dock/main/docker-compose.yaml \
   > docker-compose.yaml
 docker compose pull ani-dock
-docker compose up --detach --no-build
+docker compose up -d --no-build
 ```
 
 Keep `ANI_DOCK_IMAGE` and `ANI_DOCK_VOLUMES` exported or saved in `.env` while
@@ -218,7 +234,7 @@ dependencies:
 git clone https://github.com/yuzheng14/ani-dock.git
 cd ani-dock
 
-ANI_DOCK_IMAGE=ani-dock:local docker compose up --detach --build
+ANI_DOCK_IMAGE=ani-dock:local docker compose up -d --build
 ```
 
 ## Reporting issues
