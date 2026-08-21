@@ -130,6 +130,7 @@ impl AnimeRepository {
             episode.id as "episode_id: Hyphenated",
             episode.sn as "episode_sn: u32",
             episode.cover as episode_cover,
+            episode.cover_id as "cover_id?: Hyphenated",
             episode.episode as "episode_episode: u32",
             episode.create_at as "episode_create_at: DateTime<Local>",
             episode.update_at as "episode_update_at: DateTime<Local>"
@@ -158,6 +159,7 @@ impl AnimeRepository {
                 let id = first.id.into_uuid();
                 let sn = first.sn;
                 let cover = first.cover.clone();
+                let cover_id = first.cover_id.map(|v| v.into_uuid());
                 let name = first.name.clone();
                 let create_at = first.create_at;
                 let update_at = first.update_at;
@@ -169,6 +171,7 @@ impl AnimeRepository {
                                 id: row.episode_id.into_uuid(),
                                 sn: row.episode_sn,
                                 cover: row.episode_cover,
+                                cover_id: row.cover_id.map(|v| v.into_uuid()),
                                 episode: row.episode_episode,
 
                                 create_at: row.episode_create_at,
@@ -182,6 +185,7 @@ impl AnimeRepository {
                     id,
                     sn,
                     cover,
+                    cover_id,
                     name,
 
                     series,
@@ -208,6 +212,7 @@ impl AnimeRepository {
                     e.id,
                     e.sn,
                     e.cover,
+                    e.cover_id,
                     e.episode,
 
                     e.create_at,
@@ -229,6 +234,7 @@ impl AnimeRepository {
                                 'id', id,
                                 'sn', sn,
                                 'cover', cover,
+                                'cover_id', cover_id,
                                 'episode', episode,
                                 'create_at', create_at,
                                 'update_at', update_at
@@ -260,6 +266,7 @@ impl AnimeRepository {
                 a.sn as "sn: u32",
                 a.name,
                 a.cover,
+                a.cover_id as "cover_id?: Hyphenated",
                 a.create_at as "create_at: DateTime<Local>",
                 a.update_at as "update_at: DateTime<Local>",
                 series as 'series!: _'
@@ -291,6 +298,7 @@ impl EpisodeRepository {
                 id AS "id: Hyphenated",
                 sn AS "sn: u32",
                 cover,
+                cover_id AS "cover_id?: Hyphenated",
                 episode AS "episode: u32",
                 create_at AS "create_at: DateTime<Local>",
                 update_at AS "update_at: DateTime<Local>"
@@ -306,6 +314,7 @@ impl EpisodeRepository {
             id: r.id.into_uuid(),
             sn: r.sn,
             cover: r.cover,
+            cover_id: r.cover_id.map(|v| v.into_uuid()),
             episode: r.episode,
             create_at: r.create_at,
             update_at: r.update_at,

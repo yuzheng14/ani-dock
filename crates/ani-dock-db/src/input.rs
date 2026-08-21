@@ -1,7 +1,9 @@
+use std::net::UdpSocket;
+
 use chrono::{DateTime, Local};
 use indexmap::IndexMap;
 use sqlx::types::Json;
-use uuid::Uuid;
+use uuid::{Uuid, fmt::Hyphenated};
 
 use crate::{
     CoreAnime, CoreEpisode,
@@ -21,6 +23,7 @@ pub struct AnimeRow {
     pub id: Uuid,
     pub sn: u32,
     pub cover: String,
+    pub cover_id: Option<Hyphenated>,
     pub name: String,
 
     pub series: Json<IndexMap<String, Vec<Episode>>>,
@@ -35,6 +38,7 @@ impl From<AnimeRow> for Anime {
             id: value.id,
             sn: value.sn,
             cover: value.cover,
+            cover_id: value.cover_id.map(|v| v.into_uuid()),
             name: value.name,
             series: value.series.0,
             create_at: value.create_at,
