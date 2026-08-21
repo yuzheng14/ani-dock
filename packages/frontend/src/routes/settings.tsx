@@ -22,6 +22,11 @@ export const Route = createFileRoute('/settings')({
   component: RouteComponent,
 })
 
+type UpdateSettingsVariables = {
+  settings: Settings
+  restartRequired: boolean
+}
+
 function RouteComponent() {
   const queryClient = useQueryClient()
 
@@ -41,7 +46,7 @@ function RouteComponent() {
   }, [settingsQuery.data])
 
   const mutation = useMutation({
-    mutationFn: async (settings: Settings) => {
+    mutationFn: async ({ settings }: UpdateSettingsVariables) => {
       const resp = await fetch('/api/settings', {
         method: 'PUT',
         headers: {
@@ -85,6 +90,8 @@ function RouteComponent() {
     return skeleton
   }
 
+  const savedSettings = settingsQuery.data ?? form
+
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) =>
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev))
 
@@ -93,7 +100,13 @@ function RouteComponent() {
       className="p-4"
       onSubmit={(e) => {
         e.preventDefault()
-        mutation.mutate(form)
+        mutation.mutate({
+          settings: form,
+          restartRequired:
+            savedSettings.cookie !== form.cookie ||
+            savedSettings.ua !== form.ua ||
+            savedSettings.proxy !== form.proxy,
+        })
       }}
     >
       <FieldSet className="w-full max-w-lg">
@@ -107,7 +120,18 @@ function RouteComponent() {
               <CircleCheck />
               <AlertTitle>更新成功</AlertTitle>
               <AlertDescription>
-                如果更新了 cookie/ua/代理，请重启后端
+                {mutation.variables?.restartRequired ? (
+                  <>
+                    Cookie、UA 或代理需要重启后端后生效。
+                    <br />
+                    Docker Compose：
+                    <code>docker compose restart ani-dock</code>
+                    ；独立容器：<code>docker restart &lt;容器名&gt;</code>
+                    ；原生运行：重启 ani-dock 进程。
+                  </>
+                ) : (
+                  '配置已生效。'
+                )}
               </AlertDescription>
             </Alert>
           </Field>
