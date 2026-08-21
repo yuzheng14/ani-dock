@@ -34,6 +34,7 @@ jobs:
       annotations: ${{ steps.metadata.outputs.annotations }}
       json: ${{ steps.metadata.outputs.json }}
       labels: ${{ steps.metadata.outputs.labels }}
+      release_sha: ${{ steps.release.outputs.sha }}
 
     steps:
       - name: Validate release tag
@@ -49,6 +50,11 @@ jobs:
         with:
           ref: ${{ env.RELEASE_TAG }}
           persist-credentials: false
+
+      - name: Resolve release commit
+        id: release
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
 
       - name: Verify product version
         shell: bash
@@ -95,7 +101,7 @@ jobs:
       - name: Checkout release
         uses: actions/checkout@v7
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.prepare.outputs.release_sha }}
           persist-credentials: false
 
       - name: Set up Docker Buildx
@@ -118,7 +124,6 @@ jobs:
           labels: ${{ needs.prepare.outputs.labels }}
           annotations: ${{ needs.prepare.outputs.annotations }}
           cache-from: type=gha,scope=ani-dock-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=ani-dock-${{ matrix.arch }}
 
       - name: Export image digest
         shell: bash
@@ -214,6 +219,27 @@ jobs:
           echo "tag=${first_tag}" >> "${GITHUB_OUTPUT}"
 
       - name: Inspect published image
+        shell: bash
         env:
           IMAGE_TAG: ${{ steps.manifest.outputs.tag }}
-        run: docker buildx imagetools inspect "${IMAGE_TAG}"
+        run: |
+          manifest="$(docker buildx imagetools inspect "${IMAGE_TAG}" --raw)"
+          mapfile -t platforms < <(
+            jq -r '
+              [
+                .manifests[]?
+                | select(.platform.os == "linux")
+                | "\(.platform.os)/\(.platform.architecture)"
+              ]
+              | unique[]
+            ' <<< "${manifest}"
+          )
+
+          expected_platforms=(linux/amd64 linux/arm64)
+          if [ "${platforms[*]}" != "${expected_platforms[*]}" ]; then
+            echo "::error::Expected platforms ${expected_platforms[*]}, found ${platforms[*]:-none}"
+            jq . <<< "${manifest}"
+            exit 1
+          fi
+
+          printf 'Published platforms: %s\n' "${platforms[@]}"
