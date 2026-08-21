@@ -1,8 +1,31 @@
 services:
+  initialize-permissions:
+    image: ${ANI_DOCK_IMAGE:-ghcr.io/yuzheng14/ani-dock:latest}
+
+    user: "0:0"
+    command:
+      - chown
+      - -R
+      - 10001:10001
+      - /home/anidock/.ani-dock
+
+    volumes:
+      - ${ANI_DOCK_VOLUMES:-ani-dock-data}:/home/anidock/.ani-dock
+
+    network_mode: "none"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
   ani-dock:
     image: ${ANI_DOCK_IMAGE:-ghcr.io/yuzheng14/ani-dock:latest}
 
     build: .
+
+    depends_on:
+      initialize-permissions:
+        condition: service_completed_successfully
 
     environment:
       ANI_DOCK_HOST: ${ANI_DOCK_HOST:-0.0.0.0}
