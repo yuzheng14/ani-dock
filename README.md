@@ -103,15 +103,16 @@ curl -fsSL \
   https://raw.githubusercontent.com/yuzheng14/ani-dock/main/docker-compose.yaml \
   > docker-compose.yaml
 
-export ANI_DOCK_IMAGE=ghcr.io/yuzheng14/ani-dock:latest
 docker compose pull ani-dock
 docker compose up -d --no-build
 ```
 
 Open <http://127.0.0.1:6789> after the container becomes healthy.
 
-Use a version tag such as `0.1.0` instead of `latest` if you want reproducible
-deployments. Available image tags are listed on the
+The Compose file defaults to `ghcr.io/yuzheng14/ani-dock:latest`. Set
+`ANI_DOCK_IMAGE` to a version tag such as
+`ghcr.io/yuzheng14/ani-dock:0.1.0` if you want reproducible deployments.
+Available image tags are listed on the
 [container package](https://github.com/yuzheng14/ani-dock/pkgs/container/ani-dock)
 page.
 
@@ -140,12 +141,12 @@ For Docker Compose, set the host directory and start the service:
 
 ```bash
 export ANI_DOCK_VOLUMES=./data
-export ANI_DOCK_IMAGE=ghcr.io/yuzheng14/ani-dock:latest
 docker compose up -d --no-build
 ```
 
-You can place `ANI_DOCK_IMAGE` and `ANI_DOCK_VOLUMES` in the deployment
-directory's `.env` file instead of exporting them for every shell session.
+You can place `ANI_DOCK_IMAGE`, `ANI_DOCK_VOLUMES`, and other Compose
+overrides in the deployment directory's `.env` file instead of exporting them
+for every shell session.
 
 For a direct Docker deployment, replace
 `-v ani-dock-data:/home/anidock/.ani-dock` in the `docker run` command with
@@ -225,8 +226,8 @@ docker compose pull ani-dock
 docker compose up -d --no-build
 ```
 
-Keep `ANI_DOCK_IMAGE` and `ANI_DOCK_VOLUMES` exported or saved in `.env` while
-running these commands.
+Keep any custom `ANI_DOCK_IMAGE` or `ANI_DOCK_VOLUMES` overrides exported or
+saved in `.env` while running these commands.
 
 For a direct Docker deployment, pull the new image, remove the old container,
 and repeat the `docker run` command above. The named volume is not deleted when
