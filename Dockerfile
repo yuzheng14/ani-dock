@@ -56,6 +56,8 @@ RUN --mount=type=cache,id=ani-dock-cargo-registry,target=/usr/local/cargo/regist
 # ============================================================
 FROM debian:trixie-slim AS runtime
 
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
 RUN apt update && \
   apt install -y --no-install-recommends \
   ca-certificates \
