@@ -19,7 +19,6 @@ async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
         )
         .with_target(true)
         .with_line_number(true)
-        .with_ansi(std::env::var_os("NO_COLOR").is_none_or(|value| value.is_empty()))
         .init();
 
     let pool = get_conn_pool().await?;
