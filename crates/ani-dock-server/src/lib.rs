@@ -20,6 +20,10 @@ pub enum ApiError {
     WriteConfig(#[from] ConfigError),
     #[error("写入 cookie 文件错误：{0}")]
     WriteCookie(#[from] CookieError),
+    #[error("资源不存在")]
+    NotFound,
+    #[error(transparent)]
+    Internal(#[from] anyhow::Error),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -31,12 +35,22 @@ pub enum ErrorCode {
     SSEEventJsonDataConvert,
     WriteConfig,
     WriteCookie,
+    ResolveCoverImage,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ErrorBody {
-    code: ErrorCode,
+    success: bool,
     message: String,
+}
+
+impl ErrorBody {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            success: false,
+            message: message.into(),
+        }
+    }
 }
 
 pub type ApiResult<T = ()> = Result<T, ApiError>;
@@ -46,55 +60,16 @@ pub type CoreAnime = ani_dock_core::Anime;
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
         tracing::error!(error = %self, "请求错误");
-        match self {
-            Self::Db(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: ErrorCode::DbError,
-                    message: self.to_string(),
-                }),
-            )
-                .into_response(),
-            Self::ResolveAnimeError(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: ErrorCode::ResolveAnimeError,
-                    message: self.to_string(),
-                }),
-            )
-                .into_response(),
-            Self::EpisodeNotFound(_) => (
-                StatusCode::NOT_FOUND,
-                Json(ErrorBody {
-                    code: ErrorCode::EpisodeNotFound,
-                    message: self.to_string(),
-                }),
-            )
-                .into_response(),
-            Self::SSEEventJsonDataConvert(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: ErrorCode::SSEEventJsonDataConvert,
-                    message: self.to_string(),
-                }),
-            )
-                .into_response(),
-            Self::WriteConfig(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: ErrorCode::WriteConfig,
-                    message: self.to_string(),
-                }),
-            )
-                .into_response(),
-            Self::WriteCookie(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorBody {
-                    code: ErrorCode::WriteCookie,
-                    message: self.to_string(),
-                }),
-            )
-                .into_response(),
-        }
+        let status: StatusCode = match self {
+            Self::Db(_)
+            | Self::ResolveAnimeError(_)
+            | Self::SSEEventJsonDataConvert(_)
+            | Self::WriteConfig(_)
+            | Self::WriteCookie(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::EpisodeNotFound(_) | Self::NotFound => StatusCode::NOT_FOUND,
+            Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+
+        (status, Json(ErrorBody::new(self.to_string()))).into_response()
     }
 }

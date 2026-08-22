@@ -4,17 +4,22 @@ use std::{
 };
 
 use ani_dock_core::{
-    AnimeResolveError, AnimeResolver, DownloadStatusNotifier, EpisodeDownloadError,
-    EpisodeDownloadEvent, EpisodeDownloader,
+    DownloadStatusNotifier, EpisodeDownloadError, EpisodeDownloadEvent, EpisodeDownloader,
+    RequestClient, utils::get_referer,
 };
-use ani_dock_db::repository::AnimeRepository;
-use ani_dock_db::repository::DownloadQueueRepository;
+use ani_dock_db::{
+    input::CreateCoverImage,
+    repository::{CoverImageRepository, DownloadQueueRepository},
+};
+use anyhow::Context;
+use axum::body::Bytes;
 use indexmap::{IndexMap, map::Entry};
-use thiserror::Error;
 use tokio::{
     sync::{Semaphore, broadcast},
     time,
 };
+use uuid::Uuid;
+use wreq::header::REFERER;
 
 use crate::CoreEpisode;
 
@@ -167,31 +172,43 @@ pub struct DownloadStatus {
     pub state: DownloadState,
 }
 
-#[derive(Debug, Clone)]
-pub struct AnimeImporter {
-    anime_repo: AnimeRepository,
-    resolver: AnimeResolver,
-}
+/// this will not update cover_id for anime or episode
+pub async fn request_cover(
+    request_client: &RequestClient,
+    cover_image_repo: &CoverImageRepository,
+    url: &str,
+    sn: u32,
+) -> anyhow::Result<(String, Bytes, Uuid)> {
+    let cover_resp = request_client
+        .get(url, false)
+        .header(REFERER, get_referer(sn))
+        .send()
+        .await
+        .context("请求封面错误")?
+        .error_for_status()
+        .context("封面 HTTP 状态错误")?;
 
-impl AnimeImporter {
-    pub fn new(repo: AnimeRepository, resolver: AnimeResolver) -> Self {
-        Self {
-            anime_repo: repo,
-            resolver,
-        }
-    }
+    let mime_type = cover_resp
+        .headers()
+        .get("Content-Type")
+        .cloned()
+        .context("封面响应缺少 Content-Type")?
+        .to_str()
+        .context("封面响应头转换字符串失败")?
+        .to_owned();
 
-    pub async fn import_anime(&self, sn: u32) -> Result<(), ImportAnimeError> {
-        let anime = self.resolver.from_episode_sn(sn).await?;
-        todo!();
-        Ok(())
-    }
-}
+    let bytes = cover_resp.bytes().await.context("读取封面数据失败")?;
 
-#[derive(Debug, Error)]
-pub enum ImportAnimeError {
-    #[error(transparent)]
-    Resolve(#[from] AnimeResolveError),
+    let cover_image = cover_image_repo
+        .save(CreateCoverImage {
+            url: url.into(),
+            bytes: bytes.clone(),
+            mime_type: mime_type.clone(),
+        })
+        .await
+        .context("存储封面数据失败")?;
+
+    Ok((mime_type, bytes, cover_image.id))
 }
 
 #[cfg(test)]

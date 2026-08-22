@@ -20,8 +20,8 @@ import {
 } from '@/components/ui/progress'
 import type { DownloadEvent } from '@ani-dock/shared-type'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { HardDriveDownload } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { HardDriveDownload, ImageOff } from 'lucide-react'
+import { useEffect, useState, type ComponentProps, type ReactNode } from 'react'
 
 export const Route = createFileRoute('/downloading')({
   component: RouteComponent,
@@ -73,6 +73,27 @@ function DownloadStatus({ de }: { de: DownloadEvent }) {
   }
 }
 
+function ImageWithFallback(
+  props: ComponentProps<'img'> & { fallback: ReactNode }
+) {
+  const { fallback, ...imageProps } = props
+  const [failed, setFailed] = useState(false)
+
+  if (failed) {
+    return fallback
+  }
+
+  return (
+    <img
+      {...imageProps}
+      onError={(ev) => {
+        setFailed(true)
+        imageProps.onError?.(ev)
+      }}
+    />
+  )
+}
+
 function RouteComponent() {
   const { downloadEvents } = useDownloadEvent()
 
@@ -103,11 +124,12 @@ function RouteComponent() {
         {downloadEvents.map((de) => (
           <Item key={de.episode.id} variant={'outline'} role="listitem">
             <ItemMedia variant={'image'}>
-              <img
-                src={de.episode.cover}
+              <ImageWithFallback
+                src={`/api/episodes/${de.episode.id}/cover`}
                 width={32}
                 height={32}
                 className="object-cover"
+                fallback={<ImageOff className="size-4" />}
               />
             </ItemMedia>
             <ItemContent>

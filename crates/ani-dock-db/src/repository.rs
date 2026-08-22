@@ -5,8 +5,8 @@ use uuid::{Uuid, fmt::Hyphenated};
 
 use crate::{
     CoreEpisode,
-    input::{AnimeRow, CreateAnime},
-    model::{Anime, Episode},
+    input::{AnimeRow, AnimeRowWithSeries, CreateAnime, CreateCoverImage, EpisodeRow},
+    model::{Anime, CoverImage, Episode},
 };
 
 pub type DbResult<T = ()> = Result<T, sqlx::Error>;
@@ -202,7 +202,7 @@ impl AnimeRepository {
 
     pub async fn select_by_download_status(&self, downloaded: bool) -> DbResult<Vec<Anime>> {
         sqlx::query_as!(
-            AnimeRow,
+            AnimeRowWithSeries,
             r#"
             WITH matched_episode AS (
                 SELECT
@@ -280,6 +280,43 @@ impl AnimeRepository {
         .await
         .map(|animes| animes.into_iter().map(Into::into).collect())
     }
+
+    pub async fn select_row_by_id_or_sn(&self, id_or_sn: &str) -> DbResult<Option<Anime>> {
+        let anime = sqlx::query_as!(
+            AnimeRow,
+            r#"SELECT
+                id as "id: Hyphenated",
+                sn as "sn: u32",
+                cover,
+                cover_id as "cover_id?: Hyphenated",
+                name,
+                
+                create_at AS "create_at: DateTime<Local>",
+                update_at AS "update_at: DateTime<Local>"
+            FROM anime
+            WHERE id = $1 or sn = $1
+                "#,
+            id_or_sn,
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(anime.map(Into::into))
+    }
+
+    pub async fn update_cover_id(&self, id: Uuid, cover_id: Uuid) -> DbResult {
+        sqlx::query!(
+            r#"
+            UPDATE anime
+            SET cover_id = $1
+            WHERE id = $2"#,
+            cover_id.to_string(),
+            id.to_string()
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -320,6 +357,70 @@ impl EpisodeRepository {
             create_at: r.create_at,
             update_at: r.update_at,
         }))
+    }
+
+    pub async fn select_one_by_anime_id(&self, id: Uuid) -> DbResult<Option<Episode>> {
+        let episode = sqlx::query_as!(
+            EpisodeRow,
+            r#"
+            SELECT
+                id as "id: Hyphenated",
+                sn as "sn: u32",
+                cover,
+                cover_id as "cover_id?: Hyphenated",
+                episode as "episode: u32",
+
+                series_id as "series_id: Hyphenated",
+                
+                create_at as "create_at: DateTime<Local>",
+                update_at as "update_at: DateTime<Local>"
+            FROM episode AS e
+            WHERE (
+                SELECT anime_id FROM series AS s WHERE s.id = e.series_id
+            ) = $1"#,
+            id.to_string()
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(episode.map(Into::into))
+    }
+
+    pub async fn select_one_by_id_or_sn(&self, id_or_sn: &str) -> DbResult<Option<Episode>> {
+        let episode = sqlx::query_as!(
+            EpisodeRow,
+            r#"
+            SELECT
+                id as "id: Hyphenated",
+                sn as "sn: u32",
+                cover,
+                cover_id as "cover_id?: Hyphenated",
+                episode as "episode: u32",
+                series_id as "series_id: Hyphenated",
+                create_at as "create_at: DateTime<Local>",
+                update_at as "update_at: DateTime<Local>"
+            FROM episode
+            WHERE id = $1 or sn = $1"#,
+            id_or_sn,
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(episode.map(Into::into))
+    }
+
+    pub async fn update_cover_id(&self, id: Uuid, cover_id: Uuid) -> DbResult {
+        sqlx::query!(
+            r#"
+            UPDATE episode
+            SET cover_id = $1
+            WHERE id = $2"#,
+            cover_id.to_string(),
+            id.to_string()
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 }
 
@@ -371,6 +472,68 @@ impl DownloadQueueRepository {
         .await?;
 
         Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CoverImageRepository {
+    pool: SqlitePool,
+}
+
+impl CoverImageRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+
+    pub async fn select_one(&self, id: &str) -> DbResult<CoverImage> {
+        let cover_image = sqlx::query_as!(
+            CoverImage,
+            r#"
+            SELECT
+                id as "id: Hyphenated",
+                url,
+                bytes,
+                mime_type,
+
+                create_at as "create_at: DateTime<Local>",
+                update_at as "update_at: DateTime<Local>"
+            FROM cover_image
+            WHERE id = $1"#,
+            id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(cover_image)
+    }
+
+    pub async fn save(&self, data: CreateCoverImage) -> DbResult<CoverImage> {
+        let id = Uuid::now_v7().hyphenated();
+        let create_at = Local::now();
+        let cover_image = sqlx::query_as!(
+            CoverImage,
+            r#"
+            INSERT INTO cover_image (id, url, bytes, mime_type, create_at, update_at)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING 
+                id as "id: Hyphenated",
+                url,
+                bytes,
+                mime_type,
+                create_at as "create_at: DateTime<Local>",
+                update_at as "update_at: DateTime<Local>"
+                "#,
+            id,
+            data.url,
+            data.bytes.as_ref(),
+            data.mime_type,
+            create_at.clone(),
+            create_at
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(cover_image)
     }
 }
 

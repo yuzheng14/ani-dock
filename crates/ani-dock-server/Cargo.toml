@@ -6,7 +6,8 @@ edition = "2024"
 [dependencies]
 ani-dock-core.workspace = true
 ani-dock-db.workspace = true
-axum = { workspace = true }
+anyhow.workspace = true
+axum = { workspace = true, features = ["macros"] }
 chrono = { workspace = true, features = ["serde"] }
 futures.workspace = true
 indexmap.workspace = true
@@ -20,6 +21,7 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 ts-rs.workspace = true
 uuid = { workspace = true, features = ["serde"] }
+wreq.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

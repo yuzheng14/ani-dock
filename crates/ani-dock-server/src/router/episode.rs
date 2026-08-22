@@ -4,25 +4,38 @@ use ani_dock_db::{
     model::Episode,
     repository::{DbResult, EpisodeRepository},
 };
+use anyhow::Context;
 use axum::{
-    Json,
-    extract::State,
-    http::StatusCode,
+    Json, Router,
+    body::Bytes,
+    extract::{Path, State},
+    http::{HeaderName, StatusCode},
     response::{
         Sse,
         sse::{Event, KeepAlive},
     },
+    routing::{get, post, put},
 };
 use futures::{Stream, StreamExt, future::try_join_all, stream};
 use serde::Serialize;
 use tokio_stream::wrappers::{BroadcastStream, errors::BroadcastStreamRecvError};
 use ts_rs::TS;
+use wreq::header::CONTENT_TYPE;
 
 use crate::{
     ApiError, ApiResult, CoreEpisode,
     router::AppState,
-    service::{DownloadState, DownloadStatus},
+    service::{DownloadState, DownloadStatus, request_cover},
 };
+
+pub fn router() -> Router<AppState> {
+    Router::new()
+        .route("/download", put(download))
+        .route("/undownloaded", get(get_undownload_episodes))
+        .route("/download/restore", post(restore_download_list))
+        .route("/download/events", get(download_events))
+        .route("/{id_or_sn}/cover", get(get_cover))
+}
 
 pub async fn download(
     State(state): State<AppState>,
@@ -164,4 +177,49 @@ pub async fn download_events(
     let stream = stream::once(async { Ok::<_, Infallible>(snapshot) }).chain(updates);
 
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
+
+pub async fn get_cover(
+    State(state): State<AppState>,
+    Path(id_or_sn): Path<String>,
+) -> ApiResult<([(HeaderName, String); 1], Bytes)> {
+    let episode = state
+        .db
+        .episode
+        .select_one_by_id_or_sn(&id_or_sn)
+        .await
+        .context("查询剧集信息出错")?
+        .ok_or(ApiError::NotFound)?;
+
+    let (mime_type, bytes) = if let Some(cover_id) = episode.cover_id {
+        let cover_image = state
+            .db
+            .cover_image
+            .select_one(&cover_id.to_string())
+            .await
+            .context("查询剧集信息出错")?;
+
+        (cover_image.mime_type, cover_image.bytes)
+    } else if episode.cover.is_empty() {
+        return Err(ApiError::NotFound);
+    } else {
+        let (mime_type, bytes, cover_id) = request_cover(
+            &state.request_client,
+            &state.db.cover_image,
+            &episode.cover,
+            episode.sn,
+        )
+        .await?;
+
+        state
+            .db
+            .episode
+            .update_cover_id(episode.id, cover_id)
+            .await
+            .context("更新剧集的封面资源引用出错")?;
+
+        (mime_type, bytes)
+    };
+
+    Ok(([(CONTENT_TYPE, mime_type)], bytes))
 }

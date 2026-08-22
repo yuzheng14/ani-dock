@@ -1,23 +1,14 @@
 use std::sync::{Arc, Mutex};
 
-use ani_dock_core::{AnimeResolver, Config, Cookie};
-use ani_dock_db::repository::{AnimeRepository, DownloadQueueRepository, EpisodeRepository};
-use axum::{
-    Router,
-    http::StatusCode,
-    routing::{get, post, put},
+use ani_dock_core::{AnimeResolver, Config, Cookie, RequestClient};
+use ani_dock_db::repository::{
+    AnimeRepository, CoverImageRepository, DownloadQueueRepository, EpisodeRepository,
 };
+use axum::{Router, http::StatusCode, routing::get};
 #[cfg(not(debug_assertions))]
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::{
-    router::{
-        anime::{import_anime, select_animes},
-        episode::{download, download_events, get_undownload_episodes, restore_download_list},
-        health::health,
-    },
-    service::Services,
-};
+use crate::{router::health::health, service::Services};
 
 mod anime;
 mod episode;
@@ -29,6 +20,7 @@ pub struct DbRepository {
     pub anime: AnimeRepository,
     pub episode: EpisodeRepository,
     pub download_queue: DownloadQueueRepository,
+    pub cover_image: CoverImageRepository,
 }
 
 #[derive(Debug, Clone)]
@@ -38,16 +30,14 @@ pub struct AppState {
     pub services: Services,
     pub config: Arc<Mutex<Config>>,
     pub cookie: Cookie,
+    pub request_client: Arc<RequestClient>,
 }
 
 pub fn get_app_router(app_state: AppState) -> Router {
     let api_router = Router::new()
         .route("/health", get(health))
-        .route("/animes", get(select_animes).post(import_anime))
-        .route("/episodes/download", put(download))
-        .route("/episodes/undownloaded", get(get_undownload_episodes))
-        .route("/episodes/download/restore", post(restore_download_list))
-        .route("/episodes/download/events", get(download_events))
+        .nest("/animes", anime::router())
+        .nest("/episodes", episode::router())
         .nest("/settings", settings::router())
         .fallback(|| async { StatusCode::NOT_FOUND })
         .with_state(app_state);

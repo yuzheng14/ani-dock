@@ -77,6 +77,7 @@ name = "ani-dock-db"
 version = "0.1.0"
 dependencies = [
  "ani-dock-core",
+ "bytes",
  "chrono",
  "indexmap",
  "serde",
@@ -92,6 +93,7 @@ version = "0.1.0"
 dependencies = [
  "ani-dock-core",
  "ani-dock-db",
+ "anyhow",
  "axum",
  "chrono",
  "futures",
@@ -107,6 +109,7 @@ dependencies = [
  "tracing-subscriber",
  "ts-rs",
  "uuid",
+ "wreq",
 ]
 
 [[package]]
@@ -170,6 +173,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "31b698c5f9a010f6573133b09e0de5408834d0c82f8d7475a89fc1867a71cd90"
 dependencies = [
  "axum-core",
+ "axum-macros",
  "bytes",
  "form_urlencoded",
  "futures-util",
@@ -213,6 +217,17 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
+]
+
+[[package]]
+name = "axum-macros"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7aa268c23bfbbd2c4363b9cd302a4f504fb2a9dfe7e3451d66f35dd392e20aca"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.118",
 ]
 
 [[package]]

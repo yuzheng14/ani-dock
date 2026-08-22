@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use chrono::{DateTime, Local};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -39,6 +40,16 @@ pub struct DownloadQueue {
     pub downloaded: bool,
 
     pub episode_id: Uuid,
+
+    pub create_at: DateTime<Local>,
+    pub update_at: DateTime<Local>,
+}
+
+pub struct CoverImage {
+    pub id: Uuid,
+    pub url: String,
+    pub bytes: Bytes,
+    pub mime_type: String,
 
     pub create_at: DateTime<Local>,
     pub update_at: DateTime<Local>,

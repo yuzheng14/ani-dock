@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use chrono::{DateTime, Local};
 use indexmap::IndexMap;
 use sqlx::types::Json;
@@ -24,14 +25,67 @@ pub struct AnimeRow {
     pub cover_id: Option<Hyphenated>,
     pub name: String,
 
-    pub series: Json<IndexMap<String, Vec<Episode>>>,
-
     pub create_at: DateTime<Local>,
     pub update_at: DateTime<Local>,
 }
 
 impl From<AnimeRow> for Anime {
     fn from(value: AnimeRow) -> Self {
+        Self {
+            id: value.id,
+            sn: value.sn,
+            cover: value.cover,
+            cover_id: value.cover_id.map(|v| v.into_uuid()),
+            name: value.name,
+            series: IndexMap::new(),
+            create_at: value.create_at,
+            update_at: value.create_at,
+        }
+    }
+}
+
+pub struct AnimeRowWithSeries {
+    pub id: Uuid,
+    pub sn: u32,
+    pub cover: String,
+    pub cover_id: Option<Hyphenated>,
+    pub name: String,
+
+    pub series: Json<IndexMap<String, Vec<Episode>>>,
+
+    pub create_at: DateTime<Local>,
+    pub update_at: DateTime<Local>,
+}
+
+pub struct EpisodeRow {
+    pub id: Uuid,
+    pub sn: u32,
+    pub cover: String,
+    pub cover_id: Option<Hyphenated>,
+    pub episode: u32,
+
+    pub series_id: Uuid,
+
+    pub create_at: DateTime<Local>,
+    pub update_at: DateTime<Local>,
+}
+
+impl From<EpisodeRow> for Episode {
+    fn from(value: EpisodeRow) -> Self {
+        Self {
+            id: value.id,
+            sn: value.sn,
+            cover: value.cover,
+            cover_id: value.cover_id.map(|v| v.into_uuid()),
+            episode: value.episode,
+            create_at: value.create_at,
+            update_at: value.update_at,
+        }
+    }
+}
+
+impl From<AnimeRowWithSeries> for Anime {
+    fn from(value: AnimeRowWithSeries) -> Self {
         Self {
             id: value.id,
             sn: value.sn,
@@ -74,4 +128,10 @@ impl From<CoreEpisode> for CreateEpisode {
 
         Self { sn, cover, episode }
     }
+}
+
+pub struct CreateCoverImage {
+    pub url: String,
+    pub bytes: Bytes,
+    pub mime_type: String,
 }
