@@ -27,6 +27,7 @@ wreq = {
     "cookies-preserve-order",
     "deflate",
     "gzip",
+    "json",
   ]
 }
 wreq-util = "2.2.6"
