@@ -95,6 +95,7 @@ COPY --from=frontend \
 
 ENV ANI_DOCK_HOST=0.0.0.0 \
   ANI_DOCK_PORT=6789 \
+  NO_COLOR=1 \
   RUST_LOG=info
 
 USER anidock
