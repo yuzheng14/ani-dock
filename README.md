@@ -22,6 +22,10 @@ handle the rest.
 AniDock imports the entire anime, manages the download queue, and keeps
 everything on your own device through a self-hosted web interface.
 
+<p align="center">
+  <img src="./assets/demo.webp" alt="AniDock demo showing an anime being imported, episodes selected, and download progress followed" width="960">
+</p>
+
 ## How it works
 
 1. 🔎 **Paste an episode SN.** AniDock imports the entire anime.
