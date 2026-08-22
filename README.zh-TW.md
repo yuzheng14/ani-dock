@@ -21,6 +21,10 @@
 AniDock 會匯入整部動畫、管理下載佇列，並透過自行託管的 Web 介面將所有資料
 保留在你自己的裝置上。
 
+<p align="center">
+  <img src="./assets/demo.webp" alt="AniDock 實際使用示範：匯入動畫、選擇集數並查看下載進度" width="960">
+</p>
+
 ## 運作方式
 
 1. 🔎 **貼上集數 SN。** AniDock 會匯入整部動畫。

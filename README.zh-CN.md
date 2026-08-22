@@ -21,6 +21,10 @@
 AniDock 会导入整部动画、管理下载队列，并通过自托管 Web 界面将所有数据
 保留在你自己的设备上。
 
+<p align="center">
+  <img src="./assets/demo.webp" alt="AniDock 实际使用演示：导入动画、选择剧集并查看下载进度" width="960">
+</p>
+
 ## 工作方式
 
 1. 🔎 **粘贴剧集 SN。** AniDock 会导入整部动画。
