@@ -5,8 +5,8 @@ use uuid::{Uuid, fmt::Hyphenated};
 
 use crate::{
     CoreEpisode,
-    input::{AnimeRow, CreateAnime},
-    model::{Anime, Episode},
+    input::{AnimeRow, AnimeRowWithSeries, CreateAnime, CreateCoverImage, EpisodeRow},
+    model::{Anime, CoverImage, Episode},
 };
 
 pub type DbResult<T = ()> = Result<T, sqlx::Error>;
@@ -123,6 +123,7 @@ impl AnimeRepository {
             anime.id as "id: Hyphenated",
             anime.sn as "sn: u32",
             anime.cover as cover,
+            anime.cover_id as "cover_id?: Hyphenated",
             anime.name as name,
             anime.create_at as "create_at: DateTime<Local>",
             anime.update_at as "update_at: DateTime<Local>",
@@ -130,6 +131,7 @@ impl AnimeRepository {
             episode.id as "episode_id: Hyphenated",
             episode.sn as "episode_sn: u32",
             episode.cover as episode_cover,
+            episode.cover_id as "episode_cover_id?: Hyphenated",
             episode.episode as "episode_episode: u32",
             episode.create_at as "episode_create_at: DateTime<Local>",
             episode.update_at as "episode_update_at: DateTime<Local>"
@@ -158,6 +160,7 @@ impl AnimeRepository {
                 let id = first.id.into_uuid();
                 let sn = first.sn;
                 let cover = first.cover.clone();
+                let cover_id = first.cover_id.map(|v| v.into_uuid());
                 let name = first.name.clone();
                 let create_at = first.create_at;
                 let update_at = first.update_at;
@@ -169,6 +172,7 @@ impl AnimeRepository {
                                 id: row.episode_id.into_uuid(),
                                 sn: row.episode_sn,
                                 cover: row.episode_cover,
+                                cover_id: row.episode_cover_id.map(|v| v.into_uuid()),
                                 episode: row.episode_episode,
 
                                 create_at: row.episode_create_at,
@@ -182,6 +186,7 @@ impl AnimeRepository {
                     id,
                     sn,
                     cover,
+                    cover_id,
                     name,
 
                     series,
@@ -197,7 +202,7 @@ impl AnimeRepository {
 
     pub async fn select_by_download_status(&self, downloaded: bool) -> DbResult<Vec<Anime>> {
         sqlx::query_as!(
-            AnimeRow,
+            AnimeRowWithSeries,
             r#"
             WITH matched_episode AS (
                 SELECT
@@ -208,6 +213,7 @@ impl AnimeRepository {
                     e.id,
                     e.sn,
                     e.cover,
+                    e.cover_id,
                     e.episode,
 
                     e.create_at,
@@ -229,6 +235,7 @@ impl AnimeRepository {
                                 'id', id,
                                 'sn', sn,
                                 'cover', cover,
+                                'cover_id', cover_id,
                                 'episode', episode,
                                 'create_at', create_at,
                                 'update_at', update_at
@@ -260,6 +267,7 @@ impl AnimeRepository {
                 a.sn as "sn: u32",
                 a.name,
                 a.cover,
+                a.cover_id as "cover_id?: Hyphenated",
                 a.create_at as "create_at: DateTime<Local>",
                 a.update_at as "update_at: DateTime<Local>",
                 series as 'series!: _'
@@ -271,6 +279,47 @@ impl AnimeRepository {
         .fetch_all(&self.pool)
         .await
         .map(|animes| animes.into_iter().map(Into::into).collect())
+    }
+
+    pub async fn select_row_by_id_or_sn(&self, id_or_sn: &str) -> DbResult<Option<Anime>> {
+        let anime = sqlx::query_as!(
+            AnimeRow,
+            r#"SELECT
+                id as "id: Hyphenated",
+                sn as "sn: u32",
+                cover,
+                cover_id as "cover_id?: Hyphenated",
+                name,
+
+                create_at AS "create_at: DateTime<Local>",
+                update_at AS "update_at: DateTime<Local>"
+            FROM anime
+            WHERE id = $1 or sn = $1
+                "#,
+            id_or_sn,
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(anime.map(Into::into))
+    }
+
+    pub async fn update_cover_id(&self, id: Uuid, cover_id: Uuid) -> DbResult {
+        let now = Local::now();
+        sqlx::query!(
+            r#"
+            UPDATE anime
+            SET
+                cover_id = $1,
+                update_at = $2
+            WHERE id = $3"#,
+            cover_id.to_string(),
+            now,
+            id.to_string()
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 }
 
@@ -291,6 +340,7 @@ impl EpisodeRepository {
                 id AS "id: Hyphenated",
                 sn AS "sn: u32",
                 cover,
+                cover_id AS "cover_id?: Hyphenated",
                 episode AS "episode: u32",
                 create_at AS "create_at: DateTime<Local>",
                 update_at AS "update_at: DateTime<Local>"
@@ -306,10 +356,79 @@ impl EpisodeRepository {
             id: r.id.into_uuid(),
             sn: r.sn,
             cover: r.cover,
+            cover_id: r.cover_id.map(|v| v.into_uuid()),
             episode: r.episode,
             create_at: r.create_at,
             update_at: r.update_at,
         }))
+    }
+
+    pub async fn select_one_by_anime_id(&self, id: Uuid) -> DbResult<Option<Episode>> {
+        let episode = sqlx::query_as!(
+            EpisodeRow,
+            r#"
+            SELECT
+                id as "id: Hyphenated",
+                sn as "sn: u32",
+                cover,
+                cover_id as "cover_id?: Hyphenated",
+                episode as "episode: u32",
+
+                series_id as "series_id: Hyphenated",
+
+                create_at as "create_at: DateTime<Local>",
+                update_at as "update_at: DateTime<Local>"
+            FROM episode AS e
+            WHERE (
+                SELECT anime_id FROM series AS s WHERE s.id = e.series_id
+            ) = $1"#,
+            id.to_string()
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(episode.map(Into::into))
+    }
+
+    pub async fn select_one_by_id_or_sn(&self, id_or_sn: &str) -> DbResult<Option<Episode>> {
+        let episode = sqlx::query_as!(
+            EpisodeRow,
+            r#"
+            SELECT
+                id as "id: Hyphenated",
+                sn as "sn: u32",
+                cover,
+                cover_id as "cover_id?: Hyphenated",
+                episode as "episode: u32",
+                series_id as "series_id: Hyphenated",
+                create_at as "create_at: DateTime<Local>",
+                update_at as "update_at: DateTime<Local>"
+            FROM episode
+            WHERE id = $1 or sn = $1"#,
+            id_or_sn,
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(episode.map(Into::into))
+    }
+
+    pub async fn update_cover_id(&self, id: Uuid, cover_id: Uuid) -> DbResult {
+        let now = Local::now();
+        sqlx::query!(
+            r#"
+            UPDATE episode
+            SET
+                cover_id = $1,
+                update_at = $2
+            WHERE id = $3"#,
+            cover_id.to_string(),
+            now,
+            id.to_string()
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 }
 
@@ -364,6 +483,69 @@ impl DownloadQueueRepository {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct CoverImageRepository {
+    pool: SqlitePool,
+}
+
+impl CoverImageRepository {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+
+    pub async fn select_one(&self, id: &str) -> DbResult<CoverImage> {
+        let cover_image = sqlx::query_as!(
+            CoverImage,
+            r#"
+            SELECT
+                id as "id: Hyphenated",
+                url,
+                bytes,
+                mime_type,
+
+                create_at as "create_at: DateTime<Local>",
+                update_at as "update_at: DateTime<Local>"
+            FROM cover_image
+            WHERE id = $1"#,
+            id
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(cover_image)
+    }
+
+    pub async fn save(&self, data: CreateCoverImage) -> DbResult<CoverImage> {
+        let id = Uuid::now_v7().hyphenated();
+        let create_at = Local::now();
+        let cover_image = sqlx::query_as!(
+            CoverImage,
+            r#"
+            INSERT INTO cover_image (id, url, bytes, mime_type, create_at, update_at)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT(url) DO UPDATE SET url = excluded.url
+            RETURNING
+                id as "id: Hyphenated",
+                url,
+                bytes,
+                mime_type,
+                create_at as "create_at: DateTime<Local>",
+                update_at as "update_at: DateTime<Local>"
+                "#,
+            id,
+            data.url,
+            data.bytes.as_ref(),
+            data.mime_type,
+            create_at.clone(),
+            create_at
+        )
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(cover_image)
+    }
+}
+
 #[cfg(test)]
 mod test_helpers {
     use sqlx::SqlitePool;
@@ -409,6 +591,57 @@ mod test_helpers {
             episode_id,
             now,
             now
+        )
+        .execute(pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub(super) async fn insert_cover_image(pool: &SqlitePool, url: &str) -> DbResult<Uuid> {
+        let id = Uuid::now_v7();
+        let id_string = id.to_string();
+        let bytes = b"cover image".as_slice();
+        let now = Local::now();
+
+        sqlx::query!(
+            r#"
+            INSERT INTO cover_image(id, url, bytes, mime_type, create_at, update_at)
+            VALUES ($1, $2, $3, 'image/jpeg', $4, $5)
+            "#,
+            id_string,
+            url,
+            bytes,
+            now,
+            now,
+        )
+        .execute(pool)
+        .await?;
+
+        Ok(id)
+    }
+
+    pub(super) async fn set_anime_cover_id(pool: &SqlitePool, sn: u32, cover_id: Uuid) -> DbResult {
+        let cover_id = cover_id.to_string();
+
+        sqlx::query!("UPDATE anime SET cover_id = $1 WHERE sn = $2", cover_id, sn,)
+            .execute(pool)
+            .await?;
+
+        Ok(())
+    }
+
+    pub(super) async fn set_episode_cover_id(
+        pool: &SqlitePool,
+        sn: u32,
+        cover_id: Uuid,
+    ) -> DbResult {
+        let cover_id = cover_id.to_string();
+
+        sqlx::query!(
+            "UPDATE episode SET cover_id = $1 WHERE sn = $2",
+            cover_id,
+            sn,
         )
         .execute(pool)
         .await?;
@@ -500,7 +733,7 @@ mod anime_repository_tests {
 
     #[sqlx::test]
     async fn insert_and_select_all_round_trip(pool: SqlitePool) -> DbResult {
-        let repository = AnimeRepository::new(pool);
+        let repository = AnimeRepository::new(pool.clone());
 
         let mut first_series = IndexMap::new();
         first_series.insert(
@@ -555,6 +788,12 @@ mod anime_repository_tests {
             })
             .await?;
 
+        let anime_cover_id =
+            insert_cover_image(&pool, "https://example.com/anime-3499.jpg").await?;
+        let episode_cover_id = insert_cover_image(&pool, "https://example.com/3499.jpg").await?;
+        set_anime_cover_id(&pool, 3499, anime_cover_id).await?;
+        set_episode_cover_id(&pool, 3499, episode_cover_id).await?;
+
         let anime = repository.select_all().await?;
 
         assert_eq!(anime.len(), 2);
@@ -565,6 +804,7 @@ mod anime_repository_tests {
             .expect("应该返回第一部动画");
         assert_eq!(first.name, "進擊的巨人");
         assert_eq!(first.cover, "https://example.com/anime-3499.jpg");
+        assert_eq!(first.cover_id, Some(anime_cover_id));
         assert_eq!(first.series.len(), 2);
 
         let first_season = first.series.get("第一季").expect("应该返回第一季");
@@ -572,6 +812,7 @@ mod anime_repository_tests {
         assert!(first_season.iter().any(|episode| {
             episode.sn == 3499
                 && episode.cover == "https://example.com/3499.jpg"
+                && episode.cover_id == Some(episode_cover_id)
                 && episode.episode == 1
         }));
         assert!(first_season.iter().any(|episode| {
@@ -693,6 +934,12 @@ mod anime_repository_tests {
     ) -> DbResult {
         let repository = insert_status_fixture(&pool).await?;
 
+        let anime_cover_id =
+            insert_cover_image(&pool, "https://example.com/anime-3499.jpg").await?;
+        let episode_cover_id = insert_cover_image(&pool, "https://example.com/3500.jpg").await?;
+        set_anime_cover_id(&pool, 3499, anime_cover_id).await?;
+        set_episode_cover_id(&pool, 3500, episode_cover_id).await?;
+
         let anime = repository.select_by_download_status(true).await?;
 
         assert_eq!(anime.len(), 2, "3499 和 20273 都有已下载集数");
@@ -701,12 +948,14 @@ mod anime_repository_tests {
             .iter()
             .find(|anime| anime.sn == 3499)
             .expect("应返回 3499");
+        assert_eq!(first.cover_id, Some(anime_cover_id));
         assert_eq!(first.series.len(), 1, "全部待下载的第二季不应返回空 series");
         assert!(first.series.get("第二季").is_none());
 
         let main = first.series.get("本篇").expect("应返回本篇");
         assert_eq!(main.len(), 1);
         assert_eq!(main[0].sn, 3500);
+        assert_eq!(main[0].cover_id, Some(episode_cover_id));
 
         let second = anime
             .iter()
@@ -959,6 +1208,7 @@ mod download_queue_repository_tests {
 mod episode_repository_tests {
     use sqlx::SqlitePool;
 
+    use super::test_helpers::{insert_cover_image, set_episode_cover_id};
     use super::*;
     use crate::input::CreateEpisode;
 
@@ -976,7 +1226,7 @@ mod episode_repository_tests {
     #[sqlx::test]
     async fn insert_anime_and_select_round_trip(pool: SqlitePool) -> DbResult {
         let anime_repository = AnimeRepository::new(pool.clone());
-        let episode_repository = EpisodeRepository::new(pool);
+        let episode_repository = EpisodeRepository::new(pool.clone());
 
         let mut series = IndexMap::new();
         series.insert(
@@ -997,6 +1247,9 @@ mod episode_repository_tests {
             })
             .await?;
 
+        let cover_id = insert_cover_image(&pool, "https://example.com/3499.jpg").await?;
+        set_episode_cover_id(&pool, 3499, cover_id).await?;
+
         let episode = episode_repository
             .select(3499)
             .await?
@@ -1004,6 +1257,7 @@ mod episode_repository_tests {
 
         assert_eq!(episode.sn, 3499);
         assert_eq!(episode.cover, "https://example.com/3499.jpg");
+        assert_eq!(episode.cover_id, Some(cover_id));
         assert_eq!(episode.episode, 1);
 
         Ok(())
@@ -1076,6 +1330,49 @@ mod episode_repository_tests {
         assert_eq!(anime.len(), 1);
         assert_eq!(anime[0].series.len(), 1);
         assert_eq!(anime[0].series["第一季"].len(), 2);
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod cover_image_repository_tests {
+    use bytes::Bytes;
+    use sqlx::SqlitePool;
+
+    use super::*;
+
+    #[sqlx::test]
+    async fn save_returns_existing_image_when_url_already_exists(pool: SqlitePool) -> DbResult {
+        let repository = CoverImageRepository::new(pool.clone());
+        let url = "https://example.com/cover.jpg";
+
+        let first = repository
+            .save(CreateCoverImage {
+                url: url.to_owned(),
+                bytes: Bytes::from_static(b"original image"),
+                mime_type: "image/jpeg".to_owned(),
+            })
+            .await?;
+
+        let duplicate = repository
+            .save(CreateCoverImage {
+                url: url.to_owned(),
+                bytes: Bytes::from_static(b"duplicate image"),
+                mime_type: "image/png".to_owned(),
+            })
+            .await?;
+
+        assert_eq!(duplicate.id, first.id);
+        assert_eq!(duplicate.url, first.url);
+        assert_eq!(duplicate.bytes, first.bytes);
+        assert_eq!(duplicate.mime_type, first.mime_type);
+
+        let row_count =
+            sqlx::query_scalar!("SELECT COUNT(*) FROM cover_image WHERE url = $1", url,)
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(row_count, 1);
 
         Ok(())
     }

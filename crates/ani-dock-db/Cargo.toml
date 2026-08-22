@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 ani-dock-core = { workspace = true }
+bytes.workspace = true
 chrono = { workspace = true, features = ["serde"] }
 indexmap.workspace = true
 serde.workspace = true

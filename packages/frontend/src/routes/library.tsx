@@ -298,7 +298,7 @@ function RouteComponent() {
             <Item key={anime.id} className="w-3xs" variant={'outline'}>
               <ItemHeader>
                 <img
-                  src={anime.cover}
+                  src={`/api/animes/${anime.id}/cover`}
                   alt={`${anime.sn}封面`}
                   loading="lazy"
                   className="w-full rounded-md object-cover transition-transform duration-300"

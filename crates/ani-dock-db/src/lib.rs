@@ -5,7 +5,7 @@ use sqlx::{
 };
 use tokio::fs;
 
-mod input;
+pub mod input;
 pub mod model;
 pub mod repository;
 

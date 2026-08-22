@@ -33,5 +33,9 @@ pub mod error {
     pub use crate::request::token::TokenError;
 }
 
+pub mod utils {
+    pub use crate::util::get_referer;
+}
+
 #[cfg(test)]
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;

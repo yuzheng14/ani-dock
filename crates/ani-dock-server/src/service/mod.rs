@@ -5,13 +5,21 @@ use std::{
 
 use ani_dock_core::{
     DownloadStatusNotifier, EpisodeDownloadError, EpisodeDownloadEvent, EpisodeDownloader,
+    RequestClient, utils::get_referer,
 };
-use ani_dock_db::repository::DownloadQueueRepository;
+use ani_dock_db::{
+    input::CreateCoverImage,
+    repository::{CoverImageRepository, DownloadQueueRepository},
+};
+use anyhow::Context;
+use axum::body::Bytes;
 use indexmap::{IndexMap, map::Entry};
 use tokio::{
     sync::{Semaphore, broadcast},
     time,
 };
+use uuid::Uuid;
+use wreq::header::REFERER;
 
 use crate::CoreEpisode;
 
@@ -162,6 +170,51 @@ impl Downloader {
 pub struct DownloadStatus {
     pub sn: u32,
     pub state: DownloadState,
+}
+
+/// this will not update cover_id for anime or episode
+pub async fn request_cover(
+    request_client: &RequestClient,
+    cover_image_repo: &CoverImageRepository,
+    url: &str,
+    sn: u32,
+) -> anyhow::Result<(String, Bytes, Uuid)> {
+    let cover_resp = request_client
+        .get(url, false)
+        .header(REFERER, get_referer(sn))
+        .send()
+        .await
+        .context("请求封面错误")?
+        .error_for_status()
+        .context("封面 HTTP 状态错误")?;
+
+    let mime_type = cover_resp
+        .headers()
+        .get("Content-Type")
+        .cloned()
+        .context("封面响应缺少 Content-Type")?
+        .to_str()
+        .context("封面响应头转换字符串失败")?
+        .to_owned();
+
+    if !mime_type.starts_with("image/") {
+        return Err(anyhow::anyhow!(
+            "服务端返回资源类型为非图片，当前为 {mime_type}"
+        ));
+    }
+
+    let bytes = cover_resp.bytes().await.context("读取封面数据失败")?;
+
+    let cover_image = cover_image_repo
+        .save(CreateCoverImage {
+            url: url.into(),
+            bytes,
+            mime_type,
+        })
+        .await
+        .context("存储封面数据失败")?;
+
+    Ok((cover_image.mime_type, cover_image.bytes, cover_image.id))
 }
 
 #[cfg(test)]

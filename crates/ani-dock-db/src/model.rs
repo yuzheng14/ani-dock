@@ -1,8 +1,11 @@
+use bytes::Bytes;
 use chrono::{DateTime, Local};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use uuid::Uuid;
+
+use crate::CoreEpisode;
 
 #[derive(Debug, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -10,6 +13,7 @@ pub struct Anime {
     pub id: Uuid,
     pub sn: u32,
     pub cover: String,
+    pub cover_id: Option<Uuid>,
     pub name: String,
 
     pub series: IndexMap<String, Vec<Episode>>,
@@ -24,6 +28,7 @@ pub struct Episode {
     pub id: Uuid,
     pub sn: u32,
     pub cover: String,
+    pub cover_id: Option<Uuid>,
     pub episode: u32,
 
     pub create_at: DateTime<Local>,
@@ -40,7 +45,17 @@ pub struct DownloadQueue {
     pub update_at: DateTime<Local>,
 }
 
-impl From<Episode> for ani_dock_core::Episode {
+pub struct CoverImage {
+    pub id: Uuid,
+    pub url: String,
+    pub bytes: Bytes,
+    pub mime_type: String,
+
+    pub create_at: DateTime<Local>,
+    pub update_at: DateTime<Local>,
+}
+
+impl From<Episode> for CoreEpisode {
     fn from(value: Episode) -> Self {
         let Episode {
             sn, episode, cover, ..
