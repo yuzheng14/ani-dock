@@ -4,6 +4,7 @@ export type Episode = {
   id: string;
   sn: number;
   cover: string;
+  cover_id: string | null;
   episode: number;
   create_at: string;
   update_at: string;

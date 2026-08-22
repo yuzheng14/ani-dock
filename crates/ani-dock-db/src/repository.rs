@@ -290,7 +290,7 @@ impl AnimeRepository {
                 cover,
                 cover_id as "cover_id?: Hyphenated",
                 name,
-                
+
                 create_at AS "create_at: DateTime<Local>",
                 update_at AS "update_at: DateTime<Local>"
             FROM anime
@@ -305,12 +305,16 @@ impl AnimeRepository {
     }
 
     pub async fn update_cover_id(&self, id: Uuid, cover_id: Uuid) -> DbResult {
+        let now = Local::now();
         sqlx::query!(
             r#"
             UPDATE anime
-            SET cover_id = $1
-            WHERE id = $2"#,
+            SET
+                cover_id = $1,
+                update_at = $2
+            WHERE id = $3"#,
             cover_id.to_string(),
+            now,
             id.to_string()
         )
         .execute(&self.pool)
@@ -371,7 +375,7 @@ impl EpisodeRepository {
                 episode as "episode: u32",
 
                 series_id as "series_id: Hyphenated",
-                
+
                 create_at as "create_at: DateTime<Local>",
                 update_at as "update_at: DateTime<Local>"
             FROM episode AS e
@@ -410,12 +414,16 @@ impl EpisodeRepository {
     }
 
     pub async fn update_cover_id(&self, id: Uuid, cover_id: Uuid) -> DbResult {
+        let now = Local::now();
         sqlx::query!(
             r#"
             UPDATE episode
-            SET cover_id = $1
-            WHERE id = $2"#,
+            SET
+                cover_id = $1,
+                update_at = $2
+            WHERE id = $3"#,
             cover_id.to_string(),
+            now,
             id.to_string()
         )
         .execute(&self.pool)
@@ -515,7 +523,8 @@ impl CoverImageRepository {
             r#"
             INSERT INTO cover_image (id, url, bytes, mime_type, create_at, update_at)
             VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING 
+            ON CONFLICT(url) DO UPDATE SET url = excluded.url
+            RETURNING
                 id as "id: Hyphenated",
                 url,
                 bytes,
@@ -1321,6 +1330,49 @@ mod episode_repository_tests {
         assert_eq!(anime.len(), 1);
         assert_eq!(anime[0].series.len(), 1);
         assert_eq!(anime[0].series["第一季"].len(), 2);
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod cover_image_repository_tests {
+    use bytes::Bytes;
+    use sqlx::SqlitePool;
+
+    use super::*;
+
+    #[sqlx::test]
+    async fn save_returns_existing_image_when_url_already_exists(pool: SqlitePool) -> DbResult {
+        let repository = CoverImageRepository::new(pool.clone());
+        let url = "https://example.com/cover.jpg";
+
+        let first = repository
+            .save(CreateCoverImage {
+                url: url.to_owned(),
+                bytes: Bytes::from_static(b"original image"),
+                mime_type: "image/jpeg".to_owned(),
+            })
+            .await?;
+
+        let duplicate = repository
+            .save(CreateCoverImage {
+                url: url.to_owned(),
+                bytes: Bytes::from_static(b"duplicate image"),
+                mime_type: "image/png".to_owned(),
+            })
+            .await?;
+
+        assert_eq!(duplicate.id, first.id);
+        assert_eq!(duplicate.url, first.url);
+        assert_eq!(duplicate.bytes, first.bytes);
+        assert_eq!(duplicate.mime_type, first.mime_type);
+
+        let row_count =
+            sqlx::query_scalar!("SELECT COUNT(*) FROM cover_image WHERE url = $1", url,)
+                .fetch_one(&pool)
+                .await?;
+        assert_eq!(row_count, 1);
 
         Ok(())
     }

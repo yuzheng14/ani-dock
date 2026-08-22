@@ -27,18 +27,6 @@ pub enum ApiError {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ErrorCode {
-    DbError,
-    ResolveAnimeError,
-    EpisodeNotFound,
-    SSEEventJsonDataConvert,
-    WriteConfig,
-    WriteCookie,
-    ResolveCoverImage,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
 pub struct ErrorBody {
     success: bool,
     message: String,

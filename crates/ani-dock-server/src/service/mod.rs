@@ -197,18 +197,24 @@ pub async fn request_cover(
         .context("封面响应头转换字符串失败")?
         .to_owned();
 
+    if !mime_type.starts_with("image/") {
+        return Err(anyhow::anyhow!(
+            "服务端返回资源类型为非图片，当前为 {mime_type}"
+        ));
+    }
+
     let bytes = cover_resp.bytes().await.context("读取封面数据失败")?;
 
     let cover_image = cover_image_repo
         .save(CreateCoverImage {
             url: url.into(),
-            bytes: bytes.clone(),
-            mime_type: mime_type.clone(),
+            bytes,
+            mime_type,
         })
         .await
         .context("存储封面数据失败")?;
 
-    Ok((mime_type, bytes, cover_image.id))
+    Ok((cover_image.mime_type, cover_image.bytes, cover_image.id))
 }
 
 #[cfg(test)]

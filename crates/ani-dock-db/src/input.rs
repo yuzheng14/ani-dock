@@ -39,7 +39,7 @@ impl From<AnimeRow> for Anime {
             name: value.name,
             series: IndexMap::new(),
             create_at: value.create_at,
-            update_at: value.create_at,
+            update_at: value.update_at,
         }
     }
 }

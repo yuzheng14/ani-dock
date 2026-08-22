@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS cover_image (
   id TEXT PRIMARY KEY NOT NULL,
   -- url of this cover image, for distinct
-  url TEXT NOT NULL,
+  url TEXT NOT NULL UNIQUE,
   -- url image data
   bytes BLOB NOT NULL,
   mime_type TEXT NOT NULL,
@@ -10,9 +10,6 @@ CREATE TABLE IF NOT EXISTS cover_image (
   create_at TEXT NOT NULL,
   update_at TEXT NOT NULL
 ) WITHOUT ROWID, STRICT;
-
-CREATE INDEX IF NOT EXISTS idx_cover_image_url
-ON cover_image(url);
 
 ALTER TABLE anime ADD COLUMN cover_id TEXT
 REFERENCES cover_image(id)
