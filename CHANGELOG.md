@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.1](https://github.com/yuzheng14/ani-dock/compare/v0.1.0...v0.1.1) (2026-08-22)
+
+
+### Features
+
+* persist and serve cover images locally ([#44](https://github.com/yuzheng14/ani-dock/issues/44)) ([d8f1d95](https://github.com/yuzheng14/ani-dock/commit/d8f1d95663f937bae6ce994e65a955ecc5ff15dc)), closes [#7](https://github.com/yuzheng14/ani-dock/issues/7)
+
+
+### Bug Fixes
+
+* disable ANSI colors in Docker logs by default ([#55](https://github.com/yuzheng14/ani-dock/issues/55)) ([e055347](https://github.com/yuzheng14/ani-dock/commit/e0553476f112de48b7df9c41542aea09cef97308))
+* distinguish unauthenticated and non-VIP accounts ([#54](https://github.com/yuzheng14/ani-dock/issues/54)) ([6cd6255](https://github.com/yuzheng14/ani-dock/commit/6cd6255ae5b986a5a17299da990a6938bab6a52b))
+* handle structured API error responses ([#53](https://github.com/yuzheng14/ani-dock/issues/53)) ([8d107f6](https://github.com/yuzheng14/ani-dock/commit/8d107f6745ca2c2f2e2888429c4bb1d5502b4212))
+* initialize data directory permissions ([#51](https://github.com/yuzheng14/ani-dock/issues/51)) ([f52df61](https://github.com/yuzheng14/ani-dock/commit/f52df6189f561745ffdac7c95215a3d497765604))
+* use GHCR image by default in Compose ([#49](https://github.com/yuzheng14/ani-dock/issues/49)) ([9131ec7](https://github.com/yuzheng14/ani-dock/commit/9131ec7dbb42d75fae4ced21450089c5bb3d7303))
+
 ## 0.1.0 (2026-08-21)
 
 
