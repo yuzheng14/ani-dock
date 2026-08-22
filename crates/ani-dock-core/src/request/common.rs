@@ -1,4 +1,35 @@
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApiError {
+    code: u32,
+    message: String,
+    #[serde(default)]
+    status: String,
+    #[serde(default)]
+    details: Vec<Value>,
+}
+
+impl Display for ApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[code]: {}, [message]: {}", self.code, self.message)?;
+
+        if !self.status.is_empty() {
+            write!(f, ", [status]: {}", self.status)?;
+        }
+        if !self.details.is_empty() {
+            write!(f, ", [details]: {:?}", self.details)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl std::error::Error for ApiError {}
 
 /// common response body of bahmut's api returned json
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,6 +115,32 @@ mod test {
             CommonResponseBody::<TestData, String>::Error("error_string".to_string()).into_result(),
             Err("error_string".to_string())
         );
+    }
+
+    #[test]
+    fn common_response_body_deserializes_structured_api_error() -> Result<(), Box<dyn Error>> {
+        let response = r#"{
+            "error": {
+                "code": 1007,
+                "message": "裝置驗證異常！",
+                "status": "",
+                "details": []
+            }
+        }"#;
+
+        let CommonResponseBody::<TestData, ApiError>::Error(error) =
+            serde_json::from_str(response)?
+        else {
+            panic!("expected an API error response");
+        };
+
+        assert_eq!(error.code, 1007);
+        assert_eq!(error.message, "裝置驗證異常！");
+        assert_eq!(error.status, "");
+        assert!(error.details.is_empty());
+        assert_eq!(error.to_string(), "[code]: 1007, [message]: 裝置驗證異常！");
+
+        Ok(())
     }
 
     #[test]

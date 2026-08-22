@@ -30,7 +30,7 @@ use crate::{
     model::episode_detail::{EpisodeDetail, EpisodeDetailBuildError},
     request::{
         self, JsonResponseExt, RequestClient,
-        common::{CommonResponseBody, DirectDataResponseBody},
+        common::{ApiError, CommonResponseBody, DirectDataResponseBody},
         token::{Token, TokenError},
         video_src::VideoSrc,
     },
@@ -593,10 +593,10 @@ impl InnerDownloader {
             .send()
             .await?
             .error_for_status()?
-            .json_or_log::<CommonResponseBody<VideoSrc, String>>()
+            .json_or_log::<CommonResponseBody<VideoSrc, ApiError>>()
             .await?
             .into_result()
-            .map_err(EpisodeDownloadError::Api)?;
+            .map_err(|error| EpisodeDownloadError::Api(error.to_string()))?;
 
         self.device_id.set(Some(video_src.deviceid));
         let playlist_src = video_src
