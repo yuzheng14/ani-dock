@@ -223,3 +223,126 @@ pub async fn get_cover(
 
     Ok(([(CONTENT_TYPE, mime_type)], bytes))
 }
+
+#[cfg(test)]
+mod cover_tests {
+    use ani_dock_db::{
+        input::{CreateAnime, CreateEpisode},
+        repository::{AnimeRepository, EpisodeRepository},
+    };
+    use axum::extract::{Path, State};
+    use indexmap::IndexMap;
+    use sqlx::SqlitePool;
+
+    use super::*;
+    use crate::router::test_helpers::{app_state, image_server};
+
+    const IMAGE_BYTES: &[u8] = b"test episode cover";
+
+    async fn insert_episode(pool: &SqlitePool, cover: &str) -> Episode {
+        let anime_repository = AnimeRepository::new(pool.clone());
+        anime_repository
+            .insert(CreateAnime {
+                sn: 59_221,
+                cover: "https://example.com/anime.jpg".to_owned(),
+                name: "進擊的巨人".to_owned(),
+                series: IndexMap::from([(
+                    "本篇".to_owned(),
+                    vec![CreateEpisode {
+                        sn: 3_499,
+                        cover: cover.to_owned(),
+                        episode: 1,
+                    }],
+                )]),
+            })
+            .await
+            .expect("episode fixture should be inserted");
+
+        EpisodeRepository::new(pool.clone())
+            .select(3_499)
+            .await
+            .expect("episode fixture query should succeed")
+            .expect("episode fixture should exist")
+    }
+
+    #[sqlx::test(migrations = "../ani-dock-db/migrations")]
+    async fn get_cover_fetches_persists_and_reuses_episode_image(pool: SqlitePool) {
+        let image_server = image_server(IMAGE_BYTES, "image/png").await;
+        let episode = insert_episode(&pool, image_server.url()).await;
+        assert_eq!(episode.cover_id, None);
+        let state = app_state(pool);
+
+        let (headers, bytes) = get_cover(State(state.clone()), Path(episode.id.to_string()))
+            .await
+            .expect("first cover request should succeed");
+        assert_eq!(headers, [(CONTENT_TYPE, "image/png".to_owned())]);
+        assert_eq!(bytes.as_ref(), IMAGE_BYTES);
+
+        let stored_episode = state
+            .db
+            .episode
+            .select(episode.sn)
+            .await
+            .expect("stored episode query should succeed")
+            .expect("stored episode should exist");
+        let cover_id = stored_episode
+            .cover_id
+            .expect("first request should link the stored cover");
+        let stored_cover = state
+            .db
+            .cover_image
+            .select_one(&cover_id.to_string())
+            .await
+            .expect("stored cover should exist");
+        assert_eq!(stored_cover.url, image_server.url());
+        assert_eq!(stored_cover.mime_type, "image/png");
+        assert_eq!(stored_cover.bytes.as_ref(), IMAGE_BYTES);
+        assert_eq!(image_server.request_count(), 1);
+        drop(image_server);
+
+        let (_, cached_bytes) = get_cover(State(state), Path(episode.sn.to_string()))
+            .await
+            .expect("cached cover request should succeed by episode sn");
+        assert_eq!(cached_bytes.as_ref(), IMAGE_BYTES);
+    }
+
+    #[sqlx::test(migrations = "../ani-dock-db/migrations")]
+    async fn get_cover_returns_not_found_when_episode_cover_is_empty(pool: SqlitePool) {
+        let episode = insert_episode(&pool, "").await;
+        let state = app_state(pool);
+
+        let error = get_cover(State(state), Path(episode.id.to_string()))
+            .await
+            .expect_err("empty episode cover should return not found");
+
+        assert!(matches!(error, ApiError::NotFound));
+    }
+
+    #[sqlx::test(migrations = "../ani-dock-db/migrations")]
+    async fn get_cover_rejects_non_image_response_without_linking_it(pool: SqlitePool) {
+        let image_server = image_server(b"not an image", "text/plain").await;
+        let episode = insert_episode(&pool, image_server.url()).await;
+        let state = app_state(pool.clone());
+
+        let error = get_cover(State(state.clone()), Path(episode.id.to_string()))
+            .await
+            .expect_err("non-image response should be rejected");
+        assert!(matches!(error, ApiError::Internal(_)));
+
+        let stored_episode = state
+            .db
+            .episode
+            .select(episode.sn)
+            .await
+            .expect("stored episode query should succeed")
+            .expect("stored episode should exist");
+        assert_eq!(stored_episode.cover_id, None);
+
+        let cover_count: i64 = sqlx::query_scalar!("SELECT COUNT(*) FROM cover_image")
+            .fetch_one(&pool)
+            .await
+            .expect("cover count query should succeed");
+        assert_eq!(cover_count, 0);
+        assert_eq!(image_server.request_count(), 1);
+    }
+}
