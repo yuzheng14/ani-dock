@@ -30,7 +30,7 @@ use crate::{
     model::episode_detail::{EpisodeDetail, EpisodeDetailBuildError},
     request::{
         self, JsonResponseExt, RequestClient,
-        common::{CommonResponseBody, DirectDataResponseBody},
+        common::{ApiError, CommonResponseBody, DirectDataResponseBody},
         token::{Token, TokenError},
         video_src::VideoSrc,
     },
@@ -491,20 +491,6 @@ impl InnerDownloader {
             .json_or_log::<DirectDataResponseBody<Token, TokenError>>()
             .await?
             .into_result()?;
-        // let token_text = self
-        //     .request_client
-        //     .get(url, true)
-        //     .header(REFERER, get_referer(self.sn))
-        //     .send()
-        //     .await?
-        //     .error_for_status()?
-        //     .text()
-        //     .await?;
-        // println!("{token_text}");
-
-        // let token = serde_json::from_str::<DirectDataResponseBody<Token, TokenError>>(&token_text)
-        //     .map_err(|err| AnimeDownloadError::Plain(format!("parse json error: {err}")))?
-        //     .into_result()?;
 
         Ok(token)
     }
@@ -625,10 +611,10 @@ impl InnerDownloader {
             .send()
             .await?
             .error_for_status()?
-            .json_or_log::<CommonResponseBody<VideoSrc, String>>()
+            .json_or_log::<CommonResponseBody<VideoSrc, ApiError>>()
             .await?
             .into_result()
-            .map_err(EpisodeDownloadError::Api)?;
+            .map_err(|error| EpisodeDownloadError::Api(error.to_string()))?;
 
         self.device_id.set(Some(video_src.deviceid));
         let playlist_src = video_src
