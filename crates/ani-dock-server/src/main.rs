@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    io::{self, IsTerminal},
+    sync::{Arc, Mutex},
+};
 
 use ani_dock_core::{AnimeResolver, Config, Cookie, DeviceId, EpisodeDownloader, RequestClient};
 use ani_dock_db::{
@@ -19,6 +22,7 @@ async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
         )
         .with_target(true)
         .with_line_number(true)
+        .with_ansi(io::stdout().is_terminal())
         .init();
 
     let pool = get_conn_pool().await?;
