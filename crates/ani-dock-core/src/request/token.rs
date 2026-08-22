@@ -18,6 +18,10 @@ pub struct Token {
 }
 
 impl Token {
+    pub fn login(&self) -> bool {
+        self.login
+    }
+
     pub fn vip(&self) -> bool {
         self.vip
     }

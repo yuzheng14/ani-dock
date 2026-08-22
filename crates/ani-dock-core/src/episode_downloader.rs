@@ -104,6 +104,9 @@ pub enum EpisodeDownloadError {
     #[error("设备 ID 不存在")]
     DeviceIdMissing,
 
+    #[error("已设置仅限 VIP，但当前 Cookie 未被识别为登录状态")]
+    LoginRequired,
+
     #[error("已设置仅限 VIP，但当前账号不是 VIP")]
     VipRequired,
 
@@ -159,6 +162,22 @@ impl From<nom::error::Error<&[u8]>> for EpisodeDownloadError {
 }
 
 pub type EpisodeDownloadResult<T = ()> = Result<T, EpisodeDownloadError>;
+
+fn check_vip_requirement(token: &Token, only_use_vip: bool) -> EpisodeDownloadResult {
+    if !only_use_vip {
+        return Ok(());
+    }
+
+    if !token.login() {
+        return Err(EpisodeDownloadError::LoginRequired);
+    }
+
+    if !token.vip() {
+        return Err(EpisodeDownloadError::VipRequired);
+    }
+
+    Ok(())
+}
 
 impl EpisodeDownloader {
     pub fn new(
@@ -228,11 +247,10 @@ impl InnerDownloader {
         self.unlock(None).await?;
         tracing::debug!("check lock complete");
 
-        if !token.vip() {
-            if self.config.lock().unwrap().only_use_vip {
-                return Err(EpisodeDownloadError::VipRequired);
-            }
+        let only_use_vip = { self.config.lock().unwrap().only_use_vip };
+        check_vip_requirement(&token, only_use_vip)?;
 
+        if !token.vip() {
             tracing::info!(
                 self.sn,
                 self.episode,
@@ -809,6 +827,50 @@ mod serialize_test {
         assert_eq!(serde_json::to_string(&err)?, "{\"Err\":\"设备 ID 不存在\"}");
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod vip_requirement_test {
+    use crate::request::token::Token;
+
+    use super::{EpisodeDownloadError, check_vip_requirement};
+
+    fn token(login: bool, vip: bool) -> Token {
+        Token {
+            anime_sn: 59221,
+            login,
+            r18: 0,
+            src: String::new(),
+            time: 0,
+            vip,
+        }
+    }
+
+    #[test]
+    fn allows_guest_downloads_when_vip_is_not_required() {
+        assert!(check_vip_requirement(&token(false, false), false).is_ok());
+    }
+
+    #[test]
+    fn reports_unrecognized_login_before_vip_status() {
+        assert!(matches!(
+            check_vip_requirement(&token(false, false), true),
+            Err(EpisodeDownloadError::LoginRequired)
+        ));
+    }
+
+    #[test]
+    fn reports_non_vip_account_after_login_is_recognized() {
+        assert!(matches!(
+            check_vip_requirement(&token(true, false), true),
+            Err(EpisodeDownloadError::VipRequired)
+        ));
+    }
+
+    #[test]
+    fn allows_logged_in_vip_account_when_vip_is_required() {
+        assert!(check_vip_requirement(&token(true, true), true).is_ok());
     }
 }
 
