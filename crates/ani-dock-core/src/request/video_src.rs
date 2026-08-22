@@ -24,7 +24,7 @@ pub struct Src {
 mod tests {
     use std::error::Error;
 
-    use crate::request::common::CommonResponseBody;
+    use crate::request::common::{ApiError, CommonResponseBody};
 
     use super::*;
 
@@ -47,7 +47,7 @@ mod tests {
         "#;
 
         let CommonResponseBody::Data(video_src) =
-            serde_json::from_str::<CommonResponseBody<VideoSrc, String>>(response)?
+            serde_json::from_str::<CommonResponseBody<VideoSrc, ApiError>>(response)?
         else {
             panic!("expected a successful video source response");
         };
