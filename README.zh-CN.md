@@ -175,6 +175,37 @@ docker compose up -d --no-build
 
 ## 容器操作
 
+### 控制日志级别
+
+AniDock 默认使用 `info` 日志级别。可以通过 `RUST_LOG` 环境变量将级别设为
+`error`、`warn`、`info`、`debug` 或 `trace`，日志详细程度依次增加。也可以
+只为特定组件开启详细日志；例如，`info,ani_dock_core=debug` 会保持默认级别
+为 `info`，同时为核心下载器和 AniGamer 请求开启 `debug` 日志。
+
+使用 Docker Compose 时，在部署目录的 `.env` 文件中添加所需级别：
+
+```dotenv
+RUST_LOG=debug
+```
+
+然后重新创建服务并持续查看日志：
+
+```bash
+docker compose up -d --no-build
+docker compose logs -f ani-dock
+```
+
+`docker compose restart` 不会重新读取环境变量。直接使用 Docker 时，请在
+`docker run` 命令中添加 `-e RUST_LOG=debug`，并重新创建容器。从源码运行时，
+可以直接为启动命令设置该变量：
+
+```bash
+RUST_LOG=debug cargo run -p ani-dock-server
+```
+
+`debug` 和 `trace` 日志可能包含请求 URL 等诊断信息。请仅在排查问题时启用，
+排查完成后恢复为 `info`，并在分享日志前检查和移除敏感信息。
+
 ### Docker Compose
 
 ```bash
