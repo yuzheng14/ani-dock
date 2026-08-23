@@ -25,10 +25,7 @@ enum ShutdownSignal {
     Terminate,
 }
 
-async fn wait_for_shutdown_signal<C, T>(
-    ctrl_c: C,
-    terminate: T,
-) -> io::Result<ShutdownSignal>
+async fn wait_for_shutdown_signal<C, T>(ctrl_c: C, terminate: T) -> io::Result<ShutdownSignal>
 where
     C: Future<Output = io::Result<()>>,
     T: Future<Output = io::Result<()>>,
@@ -53,8 +50,7 @@ async fn shutdown_signal() -> io::Result<ShutdownSignal> {
 
     #[cfg(unix)]
     let terminate = async {
-        let mut signal =
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+        let mut signal = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
         signal.recv().await.ok_or_else(|| {
             io::Error::new(io::ErrorKind::BrokenPipe, "SIGTERM signal stream closed")
         })?;
@@ -195,12 +191,10 @@ mod tests {
 
     #[tokio::test]
     async fn signal_listener_errors_are_propagated() {
-        let error = wait_for_shutdown_signal(
-            ready(Err(io::Error::other("listener failed"))),
-            pending(),
-        )
-        .await
-        .expect_err("signal listener errors should be propagated");
+        let error =
+            wait_for_shutdown_signal(ready(Err(io::Error::other("listener failed"))), pending())
+                .await
+                .expect_err("signal listener errors should be propagated");
 
         assert_eq!(error.kind(), io::ErrorKind::Other);
     }
