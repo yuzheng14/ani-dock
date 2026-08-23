@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "@ani-dock/shared-type": "workspace:*",
@@ -32,12 +33,14 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6",
+    "jsdom": "^30.0.1",
     "oxlint": "^1.76.0",
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "shadcn": "^4.16.1",
     "tailwindcss": "^4.3.3",
     "typescript": "~6",
-    "vite": "^8"
+    "vite": "^8",
+    "vitest": "^4.1.11"
   }
 }

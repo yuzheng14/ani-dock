@@ -1,3 +1,4 @@
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   Empty,
   EmptyDescription,
@@ -18,10 +19,25 @@ import {
   ProgressLabel,
   ProgressValue,
 } from '@/components/ui/progress'
+import { toast } from '@/components/ui/toast'
+import {
+  observeDownloadEventStream,
+  type DownloadEventStreamStatus,
+} from '@/lib/download-event-stream'
 import type { DownloadEvent } from '@ani-dock/shared-type'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { HardDriveDownload, ImageOff } from 'lucide-react'
+import {
+  CircleAlert,
+  CircleCheck,
+  HardDriveDownload,
+  ImageOff,
+  LoaderCircle,
+  RefreshCw,
+} from 'lucide-react'
 import { useEffect, useState, type ComponentProps, type ReactNode } from 'react'
+
+const STREAM_FAILURE_TOAST_ID = 'download-event-stream-failure'
+const PAYLOAD_ERROR_TOAST_ID = 'download-event-payload-error'
 
 export const Route = createFileRoute('/downloading')({
   component: RouteComponent,
@@ -95,54 +111,108 @@ function ImageWithFallback(
 }
 
 function RouteComponent() {
-  const { downloadEvents } = useDownloadEvent()
-
-  if (!downloadEvents.length) {
-    return (
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia variant={'icon'}>
-            <HardDriveDownload />
-          </EmptyMedia>
-          <EmptyTitle>暂无下载任务</EmptyTitle>
-          <EmptyDescription>
-            在<Link to="/library">动画库</Link>中选择剧集开始下载
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    )
-  }
+  const { downloadEvents, streamStatus } = useDownloadEvent()
 
   return (
     <div className="pr-2 pb-2">
-      <div className="mb-4">
-        <p className="text-muted-foreground">
-          共 {downloadEvents.length} 个任务
-        </p>
+      <div
+        className={`mb-4 flex items-center gap-4 ${
+          downloadEvents.length ? 'justify-between' : 'justify-end'
+        }`}
+      >
+        {downloadEvents.length > 0 && (
+          <p className="text-muted-foreground">
+            共 {downloadEvents.length} 个任务
+          </p>
+        )}
+        <DownloadStreamStatus status={streamStatus} />
       </div>
-      <ItemGroup className="gap-2">
-        {downloadEvents.map((de) => (
-          <Item key={de.episode.id} variant={'outline'} role="listitem">
-            <ItemMedia variant={'image'}>
-              <ImageWithFallback
-                src={`/api/episodes/${de.episode.id}/cover`}
-                width={32}
-                height={32}
-                className="object-cover"
-                fallback={<ImageOff className="size-4" />}
-              />
-            </ItemMedia>
-            <ItemContent>
-              <ItemTitle className="line-clamp-1">
-                第 {de.episode.episode} 集 - {de.episode.sn}
-              </ItemTitle>
-              <ItemDescription>
-                <DownloadStatus de={de} />
-              </ItemDescription>
-            </ItemContent>
-          </Item>
-        ))}
-      </ItemGroup>
+      {streamStatus === 'failed' && (
+        <Alert variant="destructive" className="mb-4">
+          <CircleAlert />
+          <AlertTitle>下载状态连接异常</AlertTitle>
+          <AlertDescription>
+            当前任务状态可能不是最新，页面仍会继续尝试重新连接。
+          </AlertDescription>
+        </Alert>
+      )}
+      {downloadEvents.length ? (
+        <ItemGroup className="gap-2">
+          {downloadEvents.map((de) => (
+            <Item key={de.episode.id} variant={'outline'} role="listitem">
+              <ItemMedia variant={'image'}>
+                <ImageWithFallback
+                  src={`/api/episodes/${de.episode.id}/cover`}
+                  width={32}
+                  height={32}
+                  className="object-cover"
+                  fallback={<ImageOff className="size-4" />}
+                />
+              </ItemMedia>
+              <ItemContent>
+                <ItemTitle className="line-clamp-1">
+                  第 {de.episode.episode} 集 - {de.episode.sn}
+                </ItemTitle>
+                <ItemDescription>
+                  <DownloadStatus de={de} />
+                </ItemDescription>
+              </ItemContent>
+            </Item>
+          ))}
+        </ItemGroup>
+      ) : (
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant={'icon'}>
+              <HardDriveDownload />
+            </EmptyMedia>
+            <EmptyTitle>暂无下载任务</EmptyTitle>
+            <EmptyDescription>
+              在<Link to="/library">动画库</Link>中选择剧集开始下载
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      )}
+    </div>
+  )
+}
+
+function DownloadStreamStatus({
+  status,
+}: {
+  status: DownloadEventStreamStatus
+}) {
+  let icon: ReactNode
+  let label: string
+
+  switch (status) {
+    case 'connecting':
+      icon = <LoaderCircle className="size-3.5 animate-spin" />
+      label = '正在连接实时状态'
+      break
+    case 'open':
+      icon = <CircleCheck className="size-3.5 text-emerald-600" />
+      label = '实时状态已连接'
+      break
+    case 'reconnecting':
+      icon = <RefreshCw className="size-3.5 animate-spin" />
+      label = '正在重新连接'
+      break
+    case 'failed':
+      icon = <CircleAlert className="size-3.5" />
+      label = '实时状态连接异常'
+      break
+  }
+
+  return (
+    <div
+      role="status"
+      className={`flex items-center gap-1.5 text-xs ${
+        status === 'failed' ? 'text-destructive' : 'text-muted-foreground'
+      }`}
+    >
+      {icon}
+      <span>{label}</span>
     </div>
   )
 }
@@ -151,29 +221,60 @@ function useDownloadEvent() {
   const [downloadEventMap, setDownloadEventMap] = useState<
     Map<number, DownloadEvent>
   >(() => new Map())
+  const [streamStatus, setStreamStatus] =
+    useState<DownloadEventStreamStatus>('connecting')
 
   const downloadEvents = Array.from(downloadEventMap.values())
 
   useEffect(() => {
     const es = new EventSource('/api/episodes/download/events')
-    function snapshotHandler(this: EventSource, ev: MessageEvent) {
-      const dataEvents = JSON.parse(ev.data) as DownloadEvent[]
-      setDownloadEventMap(new Map(dataEvents.map((de) => [de.episode.sn, de])))
-    }
-    function updateHandler(this: EventSource, ev: MessageEvent) {
-      const de = JSON.parse(ev.data) as DownloadEvent
-      setDownloadEventMap((prev) => new Map(prev).set(de.episode.sn, de))
-    }
-    es.addEventListener('snapshot', snapshotHandler)
-    es.addEventListener('update', updateHandler)
+    const stopObserving = observeDownloadEventStream({
+      source: es,
+      onSnapshot: (events) => {
+        setDownloadEventMap(
+          new Map(events.map((event) => [event.episode.sn, event]))
+        )
+      },
+      onUpdate: (event) => {
+        setDownloadEventMap((previous) =>
+          new Map(previous).set(event.episode.sn, event)
+        )
+      },
+      onStatusChange: (status) => {
+        setStreamStatus(status)
+        if (status === 'open') {
+          toast.close(STREAM_FAILURE_TOAST_ID)
+        }
+      },
+      onPayloadError: (error) => {
+        console.error('Failed to parse download event stream payload', error)
+        toast.add({
+          id: PAYLOAD_ERROR_TOAST_ID,
+          title: '下载状态数据异常',
+          description: `收到无法识别的 ${error.messageType} 消息，已保留现有任务状态。`,
+          type: 'error',
+          timeout: 8_000,
+        })
+      },
+      onFailure: () => {
+        toast.add({
+          id: STREAM_FAILURE_TOAST_ID,
+          title: '下载状态连接异常',
+          description: '长时间无法获取最新进度，页面会继续尝试重新连接。',
+          type: 'error',
+          timeout: 0,
+        })
+      },
+    })
+
     return () => {
-      es.removeEventListener('snapshot', snapshotHandler)
-      es.removeEventListener('update', updateHandler)
-      es.close()
+      stopObserving()
+      toast.close(STREAM_FAILURE_TOAST_ID)
     }
   }, [])
 
   return {
     downloadEvents,
+    streamStatus,
   }
 }
