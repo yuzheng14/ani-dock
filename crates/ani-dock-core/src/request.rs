@@ -37,16 +37,19 @@ pub struct RequestClient {
     plain: Client,
 }
 
+const COOKIE_DOMAIN: &str = "gamer.com.tw";
+
 fn add_cookie_header_to_jar(jar: &ObservableCookieJar, cookie_header: &str, url: &Url) {
     // `Jar::add_cookie_str` accepts one Set-Cookie-style record at a time, while
     // cookie.txt contains a browser Cookie request header with multiple `name=value`
-    // pairs separated by semicolons.
+    // pairs separated by semicolons. Restore their shared parent domain so the
+    // cookies are available to both ani.gamer.com.tw and api.gamer.com.tw.
     for cookie in cookie_header
         .split(';')
         .map(str::trim)
         .filter(|cookie| !cookie.is_empty())
     {
-        jar.add_cookie_str(cookie, url);
+        jar.add_cookie_str(&format!("{cookie}; Domain={COOKIE_DOMAIN}"), url);
     }
 }
 
@@ -63,11 +66,7 @@ impl RequestClient {
 
         let (tx, mut rx) = watch::channel(String::new());
         let cookie_store = Arc::new(ObservableCookieJar::new(ORIGIN_URL.clone(), tx));
-        add_cookie_header_to_jar(
-            &cookie_store,
-            cookie.as_str(),
-            &constant::ORIGIN.parse::<Url>()?,
-        );
+        add_cookie_header_to_jar(&cookie_store, cookie.as_str(), &ORIGIN_URL);
 
         tokio::spawn(async move {
             let mut cookie = cookie;
@@ -163,29 +162,76 @@ impl JsonResponseExt for wreq::Response {
 
 #[cfg(test)]
 mod test {
-    use wreq::{cookie::CookieStore, header::USER_AGENT};
+    use wreq::{
+        cookie::CookieStore,
+        header::{HeaderValue, USER_AGENT},
+    };
 
     use super::*;
 
-    #[test]
-    fn add_cookie_header_to_jar_preserves_all_cookie_pairs() {
-        let url = constant::ORIGIN
-            .parse::<Url>()
-            .expect("origin should be a valid URL");
-        let (tx, _) = watch::channel(String::new());
-        let jar = ObservableCookieJar::new(url.clone(), tx);
-
-        add_cookie_header_to_jar(&jar, "foo=bar; session=abc==; ; BAHAID=123", &url);
-
-        let cookies = jar
-            .cookies(&url)
-            .expect("cookies should have been added to the jar");
-
-        assert_eq!(
+    fn cookie_header(jar: &ObservableCookieJar, url: &Url) -> Option<String> {
+        jar.cookies(url).map(|cookies| {
             cookies
                 .to_str()
-                .expect("cookie header should be valid text"),
-            "foo=bar; session=abc==; BAHAID=123"
+                .expect("cookie header should be valid text")
+                .to_owned()
+        })
+    }
+
+    #[test]
+    fn add_cookie_header_to_jar_shares_all_pairs_across_gamer_subdomains() {
+        let origin = ORIGIN_URL.clone();
+        let (tx, _) = watch::channel(String::new());
+        let jar = ObservableCookieJar::new(origin.clone(), tx);
+
+        add_cookie_header_to_jar(&jar, "foo=bar; session=abc==; ; BAHAID=123", &origin);
+
+        let expected = Some("foo=bar; session=abc==; BAHAID=123".to_owned());
+        assert_eq!(cookie_header(&jar, &origin), expected);
+        assert_eq!(cookie_header(&jar, &constant::API_ORIGIN_URL), expected);
+    }
+
+    #[test]
+    fn add_cookie_header_to_jar_does_not_share_cookies_outside_gamer_domain() {
+        let origin = ORIGIN_URL.clone();
+        let unrelated = Url::parse("https://example.com").expect("test URL should be valid");
+        let (tx, _) = watch::channel(String::new());
+        let jar = ObservableCookieJar::new(origin.clone(), tx);
+
+        add_cookie_header_to_jar(&jar, "session=abc", &origin);
+
+        assert_eq!(cookie_header(&jar, &unrelated), None);
+    }
+
+    #[test]
+    fn refreshed_cookie_is_persisted_and_restored_for_both_subdomains() {
+        let origin = ORIGIN_URL.clone();
+        let (changed, mut receiver) = watch::channel(String::new());
+        let jar = ObservableCookieJar::new(origin.clone(), changed);
+        add_cookie_header_to_jar(&jar, "session=old", &origin);
+
+        let headers = [HeaderValue::from_static(
+            "session=new; Domain=gamer.com.tw; Path=/",
+        )];
+        jar.set_cookies(&origin, &mut headers.iter());
+
+        assert!(
+            receiver
+                .has_changed()
+                .expect("observable jar should still own the sender")
+        );
+        let persisted = receiver.borrow_and_update().clone();
+        assert_eq!(persisted, "session=new");
+
+        let (restored_changed, _) = watch::channel(String::new());
+        let restored = ObservableCookieJar::new(origin.clone(), restored_changed);
+        add_cookie_header_to_jar(&restored, &persisted, &origin);
+
+        let expected = Some("session=new".to_owned());
+        assert_eq!(cookie_header(&restored, &origin), expected);
+        assert_eq!(
+            cookie_header(&restored, &constant::API_ORIGIN_URL),
+            expected
         );
     }
 
