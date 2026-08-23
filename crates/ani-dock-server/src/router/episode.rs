@@ -108,7 +108,7 @@ impl DownloadEvent {
 pub async fn download_events(
     State(state): State<AppState>,
 ) -> ApiResult<Sse<impl Stream<Item = Result<Event, Infallible>>>> {
-    let downloader = state.services.download.clone();
+    let shutdown = state.shutdown.clone();
     let rx = state.services.download.subscribe();
 
     let snapshot = state.services.download.state_snapshot();
@@ -158,7 +158,7 @@ pub async fn download_events(
 
     let stream = stream::once(async { Ok::<_, Infallible>(snapshot) })
         .chain(updates)
-        .take_until(async move { downloader.shutdown_requested().await });
+        .take_until(shutdown.cancelled_owned());
 
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }

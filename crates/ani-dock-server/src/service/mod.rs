@@ -135,8 +135,12 @@ pub struct Downloader {
 }
 
 impl Downloader {
-    pub fn new(episode_downloader: EpisodeDownloader, repo: DownloadQueueRepository) -> Self {
-        let (downloader, worker) = Self::build(episode_downloader, repo);
+    pub fn new(
+        episode_downloader: EpisodeDownloader,
+        repo: DownloadQueueRepository,
+        shutdown: CancellationToken,
+    ) -> Self {
+        let (downloader, worker) = Self::build(episode_downloader, repo, shutdown);
         let worker_task = tokio::spawn(worker.run());
         downloader
             .lifecycle
@@ -154,10 +158,10 @@ impl Downloader {
     fn build(
         episode_downloader: EpisodeDownloader,
         repo: DownloadQueueRepository,
+        shutdown: CancellationToken,
     ) -> (Self, DownloadWorker) {
         let (tx, _) = broadcast::channel(128);
         let (queue_tx, queue_rx) = mpsc::unbounded_channel();
-        let shutdown = CancellationToken::new();
         let state_map = Arc::new(Mutex::new(IndexMap::new()));
         let lifecycle = Arc::new(DownloadLifecycle {
             shutdown: shutdown.clone(),
@@ -201,14 +205,6 @@ impl Downloader {
         }
 
         Ok(())
-    }
-
-    /// Wait until process shutdown has been requested.
-    ///
-    /// Long-lived response streams use this to close themselves so Axum can finish draining
-    /// active connections.
-    pub async fn shutdown_requested(&self) {
-        self.lifecycle.shutdown.cancelled().await;
     }
 
     /// This only means download task has been scheduled, not completed
@@ -386,7 +382,11 @@ mod tests {
         let config = Arc::new(Mutex::new(config));
         let inner = EpisodeDownloader::new(request_client, config, DeviceId::default());
 
-        Downloader::build(inner, DownloadQueueRepository::new(pool))
+        Downloader::build(
+            inner,
+            DownloadQueueRepository::new(pool),
+            CancellationToken::new(),
+        )
     }
 
     fn assert_queue_empty(worker: &mut DownloadWorker) {
@@ -671,22 +671,6 @@ mod tests {
             downloader.state_map.lock().unwrap().get(&SN),
             Some(Ok(EpisodeDownloadEvent::Pending))
         ));
-    }
-
-    #[tokio::test]
-    async fn shutdown_waiter_finishes_after_shutdown_is_requested() {
-        let (downloader, _worker) = test_downloader_parts().await;
-        let waiter = {
-            let downloader = downloader.clone();
-            tokio::spawn(async move { downloader.shutdown_requested().await })
-        };
-
-        downloader.begin_shutdown();
-
-        time::timeout(Duration::from_secs(1), waiter)
-            .await
-            .expect("shutdown waiter should finish")
-            .expect("shutdown waiter should not panic");
     }
 
     #[tokio::test]

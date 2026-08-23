@@ -17,6 +17,7 @@ use ani_dock_server::{
 };
 use anyhow::Context;
 use axum::serve;
+use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -88,8 +89,10 @@ async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
     let resolver = Arc::new(AnimeResolver::new(request_client.clone()));
     // TODO use notifier to change status
     let downloader = EpisodeDownloader::new(request_client.clone(), config.clone(), device_id);
+    let shutdown = CancellationToken::new();
 
     let state = AppState {
+        shutdown: shutdown.clone(),
         db: DbRepository {
             anime: AnimeRepository::new(pool.clone()),
             episode: EpisodeRepository::new(pool.clone()),
@@ -98,7 +101,11 @@ async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
         },
         resolver,
         services: Services {
-            download: Downloader::new(downloader, DownloadQueueRepository::new(pool.clone())),
+            download: Downloader::new(
+                downloader,
+                DownloadQueueRepository::new(pool.clone()),
+                shutdown.child_token(),
+            ),
         },
         config,
         cookie,
@@ -114,7 +121,7 @@ async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!(restored, "待下载队列恢复完成");
 
     let downloader = state.services.download.clone();
-    let shutdown_downloader = downloader.clone();
+    let shutdown_on_signal = shutdown.clone();
     let app = get_app_router(state);
 
     let host = std::env::var("ANI_DOCK_HOST").unwrap_or_else(|_| "127.0.0.1".into());
@@ -136,12 +143,12 @@ async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
-            shutdown_downloader.begin_shutdown();
+            shutdown_on_signal.cancel();
         })
         .await;
 
     // Also stop the worker if the HTTP server exits because of an error instead of a signal.
-    downloader.begin_shutdown();
+    shutdown.cancel();
     let worker_result = downloader.wait_for_worker().await;
     pool.close().await;
 
