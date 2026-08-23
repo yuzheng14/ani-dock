@@ -14,8 +14,9 @@ indexmap.workspace = true
 serde.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "signal"] }
 tokio-stream = { workspace = true, features = ["sync"] }
+tokio-util = { workspace = true, features = ["rt"] }
 tower-http = { version = "0.7.0", features = ["fs"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }

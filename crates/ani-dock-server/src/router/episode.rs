@@ -108,6 +108,7 @@ impl DownloadEvent {
 pub async fn download_events(
     State(state): State<AppState>,
 ) -> ApiResult<Sse<impl Stream<Item = Result<Event, Infallible>>>> {
+    let shutdown = state.shutdown.clone();
     let rx = state.services.download.subscribe();
 
     let snapshot = state.services.download.state_snapshot();
@@ -155,7 +156,9 @@ pub async fn download_events(
         }
     });
 
-    let stream = stream::once(async { Ok::<_, Infallible>(snapshot) }).chain(updates);
+    let stream = stream::once(async { Ok::<_, Infallible>(snapshot) })
+        .chain(updates)
+        .take_until(shutdown.cancelled_owned());
 
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
@@ -204,6 +207,39 @@ pub async fn get_cover(
     };
 
     Ok(cover::response(&request_headers, cover_image))
+}
+
+#[cfg(test)]
+mod download_events_tests {
+    use std::time::Duration;
+
+    use axum::{body::to_bytes, response::IntoResponse};
+    use sqlx::SqlitePool;
+    use tokio::time;
+
+    use super::*;
+    use crate::router::test_helpers::app_state;
+
+    #[sqlx::test(migrations = "../ani-dock-db/migrations")]
+    async fn download_events_stream_ends_on_shutdown(pool: SqlitePool) {
+        let state = app_state(pool);
+        let shutdown = state.shutdown.clone();
+        let response = download_events(State(state))
+            .await
+            .expect("download event stream should be created")
+            .into_response();
+        let body_task =
+            tokio::spawn(async move { to_bytes(response.into_body(), usize::MAX).await });
+
+        tokio::task::yield_now().await;
+        shutdown.cancel();
+
+        time::timeout(Duration::from_secs(1), body_task)
+            .await
+            .expect("SSE body should end after shutdown")
+            .expect("SSE body task should not panic")
+            .expect("SSE body should be readable");
+    }
 }
 
 #[cfg(test)]

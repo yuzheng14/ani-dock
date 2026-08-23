@@ -20,6 +20,7 @@ type FFmpegResult<T = ()> = Result<T, FFmpegError>;
 impl FFmpeg {
     pub async fn exist() -> FFmpegResult<bool> {
         let status = Command::new("ffmpeg")
+            .kill_on_drop(true)
             .arg("-h")
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -35,6 +36,7 @@ impl FFmpeg {
     ) -> FFmpegResult {
         // TODO drop ffmpeg stdout and stderr
         let output = Command::new("ffmpeg")
+            .kill_on_drop(true)
             .arg("-allowed_extensions")
             .arg("ALL")
             .arg("-i")

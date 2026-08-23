@@ -5,6 +5,7 @@ use ani_dock_db::repository::{
     AnimeRepository, CoverImageRepository, DownloadQueueRepository, EpisodeRepository,
 };
 use axum::{Router, http::StatusCode, routing::get};
+use tokio_util::sync::CancellationToken;
 #[cfg(not(debug_assertions))]
 use tower_http::services::{ServeDir, ServeFile};
 
@@ -29,6 +30,7 @@ pub struct AppState {
     pub db: DbRepository,
     pub resolver: Arc<AnimeResolver>,
     pub services: Services,
+    pub shutdown: CancellationToken,
     pub config: Arc<Mutex<Config>>,
     pub cookie: Cookie,
     pub request_client: Arc<RequestClient>,
@@ -68,6 +70,7 @@ pub(crate) mod test_helpers {
     use axum::{Router, body::Bytes, http::header::CONTENT_TYPE, routing::get};
     use sqlx::SqlitePool;
     use tokio::{net::TcpListener, task::JoinHandle};
+    use tokio_util::sync::CancellationToken;
 
     use super::{AppState, DbRepository};
     use crate::service::{Downloader, Services};
@@ -81,6 +84,12 @@ pub(crate) mod test_helpers {
         let config = Arc::new(Mutex::new(config));
         let episode_downloader =
             EpisodeDownloader::new(request_client.clone(), config.clone(), DeviceId::default());
+        let shutdown = CancellationToken::new();
+        let (downloader, _worker) = Downloader::new(
+            episode_downloader,
+            DownloadQueueRepository::new(pool.clone()),
+            shutdown.clone(),
+        );
 
         AppState {
             db: DbRepository {
@@ -91,8 +100,9 @@ pub(crate) mod test_helpers {
             },
             resolver: Arc::new(AnimeResolver::new(request_client.clone())),
             services: Services {
-                download: Downloader::new(episode_downloader, DownloadQueueRepository::new(pool)),
+                download: downloader,
             },
+            shutdown,
             config,
             cookie,
             request_client,
