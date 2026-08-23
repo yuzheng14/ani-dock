@@ -1,10 +1,4 @@
-import {
-  Alert,
-  AlertAction,
-  AlertDescription,
-  AlertTitle,
-} from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   Empty,
   EmptyDescription,
@@ -26,10 +20,10 @@ import {
   ProgressValue,
 } from '@/components/ui/progress'
 import {
-  useDownloadEvent,
+  subscribeDownloadEventStream,
   type DownloadEventPayloadError,
   type DownloadEventStreamStatus,
-} from '@/hooks/use-download-event'
+} from '@/hooks/download-event-stream'
 import type { DownloadEvent } from '@ani-dock/shared-type'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import {
@@ -40,7 +34,7 @@ import {
   TriangleAlert,
   WifiOff,
 } from 'lucide-react'
-import { useState, type ComponentProps, type ReactNode } from 'react'
+import { useEffect, useState, type ComponentProps, type ReactNode } from 'react'
 
 export const Route = createFileRoute('/downloading')({
   component: RouteComponent,
@@ -116,11 +110,9 @@ function ImageWithFallback(
 function DownloadStreamNotice({
   status,
   payloadError,
-  onReconnect,
 }: {
   status: DownloadEventStreamStatus
   payloadError: DownloadEventPayloadError | null
-  onReconnect: () => void
 }) {
   if (status === 'failed') {
     return (
@@ -130,16 +122,6 @@ function DownloadStreamNotice({
         <AlertDescription>
           以下为最后一次收到的状态，页面仍在尝试自动重连。
         </AlertDescription>
-        <AlertAction>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onReconnect}
-          >
-            重新连接
-          </Button>
-        </AlertAction>
       </Alert>
     )
   }
@@ -153,16 +135,6 @@ function DownloadStreamNotice({
           {payloadError.event === 'snapshot' ? '任务快照' : '任务更新'}
           已被忽略：{payloadError.message}
         </AlertDescription>
-        <AlertAction>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onReconnect}
-          >
-            重新连接
-          </Button>
-        </AlertAction>
       </Alert>
     )
   }
@@ -190,13 +162,8 @@ function DownloadStreamNotice({
 }
 
 function RouteComponent() {
-  const {
-    downloadEvents,
-    streamStatus,
-    hasSnapshot,
-    streamPayloadError,
-    reconnect,
-  } = useDownloadEvent()
+  const { downloadEvents, streamStatus, hasSnapshot, streamPayloadError } =
+    useDownloadEvent()
 
   let content: ReactNode
 
@@ -272,9 +239,47 @@ function RouteComponent() {
       <DownloadStreamNotice
         status={streamStatus}
         payloadError={streamPayloadError}
-        onReconnect={reconnect}
       />
       {content}
     </div>
   )
+}
+
+function useDownloadEvent() {
+  const [downloadEventMap, setDownloadEventMap] = useState<
+    Map<number, DownloadEvent>
+  >(() => new Map())
+  const [streamStatus, setStreamStatus] =
+    useState<DownloadEventStreamStatus>('connecting')
+  const [hasSnapshot, setHasSnapshot] = useState(false)
+  const [streamPayloadError, setStreamPayloadError] =
+    useState<DownloadEventPayloadError | null>(null)
+
+  useEffect(() => {
+    const source = new EventSource('/api/episodes/download/events')
+
+    return subscribeDownloadEventStream({
+      source,
+      onStatusChange: setStreamStatus,
+      onSnapshot: (downloadEvents) => {
+        setDownloadEventMap(
+          new Map(downloadEvents.map((de) => [de.episode.sn, de]))
+        )
+        setHasSnapshot(true)
+      },
+      onUpdate: (downloadEvent) => {
+        setDownloadEventMap((current) =>
+          new Map(current).set(downloadEvent.episode.sn, downloadEvent)
+        )
+      },
+      onPayloadError: setStreamPayloadError,
+    })
+  }, [])
+
+  return {
+    downloadEvents: Array.from(downloadEventMap.values()),
+    streamStatus,
+    hasSnapshot,
+    streamPayloadError,
+  }
 }

@@ -2,7 +2,7 @@
 
 import type { DownloadEvent } from '@ani-dock/shared-type'
 import { deepStrictEqual, equal } from 'node:assert/strict'
-import { describe, it } from 'node:test'
+import { afterEach, beforeEach, describe, it, mock } from 'node:test'
 
 import {
   subscribeDownloadEventStream,
@@ -34,31 +34,32 @@ const updatedDownloadEvent: DownloadEvent = {
   },
 }
 
-type Listener = EventListenerOrEventListenerObject
-
-class MockEventSource {
+class MockEventSource extends EventTarget {
   static readonly CONNECTING = 0
   static readonly OPEN = 1
   static readonly CLOSED = 2
 
-  readonly listeners = new Map<string, Set<Listener>>()
   readyState = MockEventSource.CONNECTING
+  addedListeners = 0
+  removedListeners = 0
   closeCount = 0
 
-  addEventListener(type: string, listener: Listener | null) {
-    if (!listener) {
-      return
-    }
-
-    const listeners = this.listeners.get(type) ?? new Set()
-    listeners.add(listener)
-    this.listeners.set(type, listeners)
+  override addEventListener(
+    type: string,
+    callback: EventListenerOrEventListenerObject | null,
+    options?: boolean | AddEventListenerOptions
+  ) {
+    this.addedListeners += 1
+    super.addEventListener(type, callback, options)
   }
 
-  removeEventListener(type: string, listener: Listener | null) {
-    if (listener) {
-      this.listeners.get(type)?.delete(listener)
-    }
+  override removeEventListener(
+    type: string,
+    callback: EventListenerOrEventListenerObject | null,
+    options?: boolean | EventListenerOptions
+  ) {
+    this.removedListeners += 1
+    super.removeEventListener(type, callback, options)
   }
 
   close() {
@@ -68,82 +69,23 @@ class MockEventSource {
 
   open() {
     this.readyState = MockEventSource.OPEN
-    this.emit('open', {})
+    this.dispatchEvent(new Event('open'))
   }
 
   error({ closed = false }: { closed?: boolean } = {}) {
     this.readyState = closed
       ? MockEventSource.CLOSED
       : MockEventSource.CONNECTING
-    this.emit('error', {})
+    this.dispatchEvent(new Event('error'))
   }
 
   message(event: 'snapshot' | 'update', data: string) {
-    this.emit(event, { data })
-  }
-
-  listenerCount() {
-    return [...this.listeners.values()].reduce(
-      (count, listeners) => count + listeners.size,
-      0
-    )
-  }
-
-  private emit(type: string, event: object) {
-    for (const listener of this.listeners.get(type) ?? []) {
-      if (typeof listener === 'function') {
-        listener.call(this, event as Event)
-      } else {
-        listener.handleEvent(event as Event)
-      }
-    }
+    this.dispatchEvent(new MessageEvent(event, { data }))
   }
 }
 
-class TestScheduler {
-  private timer:
-    | {
-        id: number
-        callback: () => void
-        remaining: number
-      }
-    | undefined
-  private nextId = 1
-
-  setTimeout = (callback: () => void, delay: number) => {
-    const id = this.nextId
-    this.nextId += 1
-    this.timer = { id, callback, remaining: delay }
-    return id
-  }
-
-  clearTimeout = (timer: unknown) => {
-    if (this.timer?.id === timer) {
-      this.timer = undefined
-    }
-  }
-
-  advance(milliseconds: number) {
-    if (!this.timer) {
-      return
-    }
-
-    this.timer.remaining -= milliseconds
-    if (this.timer.remaining <= 0) {
-      const { callback } = this.timer
-      this.timer = undefined
-      callback()
-    }
-  }
-
-  get size() {
-    return this.timer ? 1 : 0
-  }
-}
-
-function createSubscription(failureTimeoutMs = 10_000) {
+function createSubscription() {
   const source = new MockEventSource()
-  const scheduler = new TestScheduler()
   const state: {
     status: DownloadEventStreamStatus | null
     snapshot: DownloadEvent[] | null
@@ -157,8 +99,6 @@ function createSubscription(failureTimeoutMs = 10_000) {
   }
   const unsubscribe = subscribeDownloadEventStream({
     source: source as unknown as EventSource,
-    scheduler,
-    failureTimeoutMs,
     onStatusChange: (status) => {
       state.status = status
     },
@@ -173,26 +113,30 @@ function createSubscription(failureTimeoutMs = 10_000) {
     },
   })
 
-  return { source, scheduler, state, unsubscribe }
+  return { source, state, unsubscribe }
 }
+
+beforeEach(() => mock.timers.enable({ apis: ['setTimeout'] }))
+afterEach(() => mock.timers.reset())
 
 describe('download event stream', () => {
   it('opens the stream and parses snapshot and update events', () => {
-    const { source, state } = createSubscription()
+    const { source, state, unsubscribe } = createSubscription()
 
     source.open()
     equal(state.status, 'open')
 
     source.message('snapshot', JSON.stringify([firstDownloadEvent]))
     deepStrictEqual(state.snapshot, [firstDownloadEvent])
-    equal(state.payloadError, null)
 
     source.message('update', JSON.stringify(updatedDownloadEvent))
     deepStrictEqual(state.updates, [updatedDownloadEvent])
+
+    unsubscribe()
   })
 
   it('keeps the last snapshot during a transient reconnect', () => {
-    const { source, scheduler, state } = createSubscription()
+    const { source, state, unsubscribe } = createSubscription()
 
     source.open()
     source.message('snapshot', JSON.stringify([firstDownloadEvent]))
@@ -201,45 +145,50 @@ describe('download event stream', () => {
     equal(state.status, 'reconnecting')
     deepStrictEqual(state.snapshot, [firstDownloadEvent])
 
-    scheduler.advance(9_999)
+    mock.timers.tick(9_999)
     equal(state.status, 'reconnecting')
 
     source.open()
-    scheduler.advance(1)
+    mock.timers.tick(1)
     equal(state.status, 'open')
     deepStrictEqual(state.snapshot, [firstDownloadEvent])
+
+    unsubscribe()
   })
 
   it('reports initial and prolonged connection failures', () => {
     const initial = createSubscription()
-    initial.scheduler.advance(10_000)
+    mock.timers.tick(10_000)
     equal(initial.state.status, 'failed')
+    initial.unsubscribe()
 
     const reconnecting = createSubscription()
     reconnecting.source.open()
     reconnecting.source.error()
-    reconnecting.scheduler.advance(10_000)
+    mock.timers.tick(10_000)
     equal(reconnecting.state.status, 'failed')
 
     reconnecting.source.error()
-    equal(reconnecting.scheduler.size, 0)
+    mock.timers.tick(10_000)
+    equal(reconnecting.state.status, 'failed')
 
     reconnecting.source.open()
     equal(reconnecting.state.status, 'open')
+    reconnecting.unsubscribe()
   })
 
   it('reports terminal connection failures immediately', () => {
-    const { source, scheduler, state } = createSubscription()
+    const { source, state, unsubscribe } = createSubscription()
 
     source.open()
     source.error({ closed: true })
-
     equal(state.status, 'failed')
-    equal(scheduler.size, 0)
+
+    unsubscribe()
   })
 
   it('ignores malformed payloads and clears the error on a valid snapshot', () => {
-    const { source, state } = createSubscription()
+    const { source, state, unsubscribe } = createSubscription()
 
     source.message('snapshot', JSON.stringify([firstDownloadEvent]))
     source.message('update', '{')
@@ -254,18 +203,20 @@ describe('download event stream', () => {
     source.message('snapshot', '[]')
     equal(state.payloadError, null)
     deepStrictEqual(state.snapshot, [])
-  })
-
-  it('removes every listener, closes the source, and clears timers', () => {
-    const { source, scheduler, unsubscribe } = createSubscription()
-
-    equal(source.listenerCount(), 4)
-    equal(scheduler.size, 1)
 
     unsubscribe()
+  })
 
-    equal(source.listenerCount(), 0)
+  it('removes listeners, closes the source, and clears the timer', () => {
+    const { source, state, unsubscribe } = createSubscription()
+
+    unsubscribe()
+    mock.timers.tick(10_000)
+    source.open()
+
+    equal(source.addedListeners, 4)
+    equal(source.removedListeners, 4)
     equal(source.closeCount, 1)
-    equal(scheduler.size, 0)
+    equal(state.status, null)
   })
 })

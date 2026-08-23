@@ -1,7 +1,6 @@
 import type { DownloadEvent } from '@ani-dock/shared-type'
 
-export const DEFAULT_FAILURE_TIMEOUT_MS = 10_000
-
+const FAILURE_TIMEOUT_MS = 10_000
 const EVENT_SOURCE_OPEN = 1
 const EVENT_SOURCE_CLOSED = 2
 
@@ -13,56 +12,16 @@ export type DownloadEventPayloadError = {
   message: string
 }
 
-type TimerScheduler = {
-  setTimeout: (callback: () => void, delay: number) => unknown
-  clearTimeout: (timer: unknown) => void
-}
-
 type SubscribeDownloadEventStreamOptions = {
   source: EventSource
   onStatusChange: (status: DownloadEventStreamStatus) => void
   onSnapshot: (downloadEvents: DownloadEvent[]) => void
   onUpdate: (downloadEvent: DownloadEvent) => void
   onPayloadError: (error: DownloadEventPayloadError | null) => void
-  failureTimeoutMs?: number
-  scheduler?: TimerScheduler
-}
-
-const defaultScheduler: TimerScheduler = {
-  setTimeout: (callback, delay) => setTimeout(callback, delay),
-  clearTimeout: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
-}
-
-function isNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value)
-}
-
-function isEpisodeDownloadEvent(value: unknown): boolean {
-  if (!isRecord(value) || typeof value.type !== 'string') {
-    return false
-  }
-
-  switch (value.type) {
-    case 'PENDING':
-    case 'PREPARING':
-    case 'WAITING_FOR_ADS':
-    case 'RESOLVE_MEDIA_RESOURCE':
-    case 'MERGING':
-    case 'FINALIZING':
-    case 'COMPLETED': {
-      return true
-    }
-    case 'DOWNLOADING_SEGMENTS': {
-      return isNumber(value.completed) && isNumber(value.total)
-    }
-    default: {
-      return false
-    }
-  }
 }
 
 function isDownloadEvent(value: unknown): value is DownloadEvent {
@@ -70,25 +29,12 @@ function isDownloadEvent(value: unknown): value is DownloadEvent {
     return false
   }
 
-  const { episode, state } = value
-  const validEpisode =
-    typeof episode.id === 'string' &&
-    isNumber(episode.sn) &&
-    typeof episode.cover === 'string' &&
-    (episode.cover_id === null || typeof episode.cover_id === 'string') &&
-    isNumber(episode.episode) &&
-    typeof episode.create_at === 'string' &&
-    typeof episode.update_at === 'string'
-
-  if (!validEpisode) {
-    return false
-  }
-
-  if (typeof state.Err === 'string') {
-    return true
-  }
-
-  return isEpisodeDownloadEvent(state.Ok)
+  return (
+    typeof value.episode.id === 'string' &&
+    typeof value.episode.sn === 'number' &&
+    typeof value.episode.episode === 'number' &&
+    (typeof value.state.Err === 'string' || isRecord(value.state.Ok))
+  )
 }
 
 function parseSnapshot(data: string): DownloadEvent[] {
@@ -111,7 +57,7 @@ function parseUpdate(data: string): DownloadEvent {
   return value
 }
 
-function payloadError(
+function toPayloadError(
   event: DownloadEventPayloadError['event'],
   error: unknown
 ): DownloadEventPayloadError {
@@ -127,37 +73,27 @@ export function subscribeDownloadEventStream({
   onSnapshot,
   onUpdate,
   onPayloadError,
-  failureTimeoutMs = DEFAULT_FAILURE_TIMEOUT_MS,
-  scheduler = defaultScheduler,
 }: SubscribeDownloadEventStreamOptions) {
-  let failureTimer: unknown
-  let failureTimerArmed = false
+  let failureTimer: ReturnType<typeof setTimeout> | undefined
   let failureReported = false
 
   function clearFailureTimer() {
-    if (!failureTimerArmed) {
-      return
-    }
-
-    scheduler.clearTimeout(failureTimer)
+    clearTimeout(failureTimer)
     failureTimer = undefined
-    failureTimerArmed = false
   }
 
   function armFailureTimer() {
-    if (failureTimerArmed) {
+    if (failureTimer !== undefined) {
       return
     }
 
-    failureTimerArmed = true
-    failureTimer = scheduler.setTimeout(() => {
+    failureTimer = setTimeout(() => {
       failureTimer = undefined
-      failureTimerArmed = false
       if (source.readyState !== EVENT_SOURCE_OPEN) {
         failureReported = true
         onStatusChange('failed')
       }
-    }, failureTimeoutMs)
+    }, FAILURE_TIMEOUT_MS)
   }
 
   function openHandler() {
@@ -174,28 +110,26 @@ export function subscribeDownloadEventStream({
       return
     }
 
-    if (failureReported) {
-      return
+    if (!failureReported) {
+      onStatusChange('reconnecting')
+      armFailureTimer()
     }
-
-    onStatusChange('reconnecting')
-    armFailureTimer()
   }
 
-  function snapshotHandler(this: EventSource, ev: MessageEvent<string>) {
+  function snapshotHandler(this: EventSource, event: MessageEvent<string>) {
     try {
-      onSnapshot(parseSnapshot(ev.data))
+      onSnapshot(parseSnapshot(event.data))
       onPayloadError(null)
     } catch (error) {
-      onPayloadError(payloadError('snapshot', error))
+      onPayloadError(toPayloadError('snapshot', error))
     }
   }
 
-  function updateHandler(this: EventSource, ev: MessageEvent<string>) {
+  function updateHandler(this: EventSource, event: MessageEvent<string>) {
     try {
-      onUpdate(parseUpdate(ev.data))
+      onUpdate(parseUpdate(event.data))
     } catch (error) {
-      onPayloadError(payloadError('update', error))
+      onPayloadError(toPayloadError('update', error))
     }
   }
 
