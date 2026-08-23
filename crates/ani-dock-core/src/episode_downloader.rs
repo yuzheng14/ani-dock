@@ -124,10 +124,6 @@ pub enum EpisodeDownloadError {
 
     #[error("播放清单解析错误：{0}")]
     PlaylistParseError(String),
-
-    /// 供上层使用
-    #[error("获取下载器并发锁失败")]
-    AcquireSemaphore,
 }
 
 impl Serialize for EpisodeDownloadError {
