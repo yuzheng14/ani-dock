@@ -2,7 +2,7 @@ set working-directory := '..'
 
 # 检查所有前端代码
 [default]
-all: format types lint
+all: format types lint test
 
 # 运行 Prettier 检查前端代码格式
 format:
@@ -15,3 +15,7 @@ types:
 # 使用 oxlint 检查前端代码
 lint:
     pnpm -F @ani-dock/frontend exec oxlint --deny-warnings
+
+# 运行前端单元测试
+test:
+    pnpm -F @ani-dock/frontend test
