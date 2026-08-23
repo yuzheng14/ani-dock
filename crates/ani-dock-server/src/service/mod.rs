@@ -122,7 +122,6 @@ impl DownloadWorker {
 
 #[derive(Debug)]
 struct DownloadLifecycle {
-    shutdown: CancellationToken,
     worker_task: Mutex<Option<JoinHandle<()>>>,
 }
 
@@ -164,7 +163,6 @@ impl Downloader {
         let (queue_tx, queue_rx) = mpsc::unbounded_channel();
         let state_map = Arc::new(Mutex::new(IndexMap::new()));
         let lifecycle = Arc::new(DownloadLifecycle {
-            shutdown: shutdown.clone(),
             worker_task: Mutex::new(None),
         });
 
@@ -188,14 +186,6 @@ impl Downloader {
         )
     }
 
-    /// Request an orderly worker shutdown.
-    ///
-    /// The current download is allowed to finish. Downloads that have not started stay in the
-    /// persistent queue and will be restored on the next process start.
-    pub fn begin_shutdown(&self) {
-        self.lifecycle.shutdown.cancel();
-    }
-
     /// Wait until the background download worker has finished its orderly shutdown.
     pub async fn wait_for_worker(&self) -> Result<(), tokio::task::JoinError> {
         let worker_task = self.lifecycle.worker_task.lock().unwrap().take();
@@ -207,14 +197,13 @@ impl Downloader {
         Ok(())
     }
 
-    /// This only means download task has been scheduled, not completed
+    /// Schedule an already-persisted download for the in-memory worker.
+    ///
+    /// Callers must insert the episode into `download_queue` before calling this method. That
+    /// ordering ensures a task accepted concurrently with shutdown can be restored next time,
+    /// even if the worker has already observed cancellation and does not receive it.
     pub fn schedule_download(&self, episode: CoreEpisode) {
         let sn = episode.sn();
-
-        if self.lifecycle.shutdown.is_cancelled() {
-            tracing::info!(sn, "服务正在关闭，下载任务保留到下次启动");
-            return;
-        }
 
         let mut state_map = self.state_map.lock().unwrap();
 
@@ -366,14 +355,27 @@ mod tests {
     use super::*;
 
     async fn test_downloader_parts() -> (Downloader, DownloadWorker) {
+        test_downloader_parts_with_shutdown(CancellationToken::new()).await
+    }
+
+    async fn test_downloader_parts_with_shutdown(
+        shutdown: CancellationToken,
+    ) -> (Downloader, DownloadWorker) {
         let pool = SqlitePool::connect("sqlite::memory:")
             .await
             .expect("in-memory sqlite should connect");
 
-        test_downloader_parts_with_pool(pool)
+        test_downloader_parts_with_pool_and_shutdown(pool, shutdown)
     }
 
     fn test_downloader_parts_with_pool(pool: SqlitePool) -> (Downloader, DownloadWorker) {
+        test_downloader_parts_with_pool_and_shutdown(pool, CancellationToken::new())
+    }
+
+    fn test_downloader_parts_with_pool_and_shutdown(
+        pool: SqlitePool,
+        shutdown: CancellationToken,
+    ) -> (Downloader, DownloadWorker) {
         let config = Config {
             proxy: Some("http://127.0.0.1:1".to_string()),
             ..Config::default()
@@ -385,7 +387,7 @@ mod tests {
         Downloader::build(
             inner,
             DownloadQueueRepository::new(pool),
-            CancellationToken::new(),
+            shutdown,
         )
     }
 
@@ -656,12 +658,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn shutdown_stops_worker_without_starting_queued_downloads() {
+    async fn shutdown_stops_worker_without_starting_a_late_download() {
         const SN: u32 = 78_901;
 
-        let (downloader, worker) = test_downloader_parts().await;
+        let shutdown = CancellationToken::new();
+        let (downloader, worker) =
+            test_downloader_parts_with_shutdown(shutdown.clone()).await;
+        shutdown.cancel();
         downloader.schedule_download(CoreEpisode::new(SN, 1, ""));
-        downloader.begin_shutdown();
 
         time::timeout(Duration::from_secs(1), worker.run())
             .await
