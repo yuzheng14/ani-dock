@@ -52,6 +52,8 @@ pub static ORIGIN_URL: LazyLock<Url> =
 ///
 /// https://api.gamer.com.tw
 pub const API_ORIGIN: &str = "https://api.gamer.com.tw";
+pub static API_ORIGIN_URL: LazyLock<Url> =
+    LazyLock::new(|| Url::parse(API_ORIGIN).expect("API ORIGIN should parsed to url"));
 
 #[cfg(test)]
 mod test {
