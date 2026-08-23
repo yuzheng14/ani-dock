@@ -1,4 +1,11 @@
 import {
+  Alert,
+  AlertAction,
+  AlertDescription,
+  AlertTitle,
+} from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import {
   Empty,
   EmptyDescription,
   EmptyHeader,
@@ -18,10 +25,22 @@ import {
   ProgressLabel,
   ProgressValue,
 } from '@/components/ui/progress'
+import {
+  useDownloadEvent,
+  type DownloadEventPayloadError,
+  type DownloadEventStreamStatus,
+} from '@/hooks/use-download-event'
 import type { DownloadEvent } from '@ani-dock/shared-type'
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { HardDriveDownload, ImageOff } from 'lucide-react'
-import { useEffect, useState, type ComponentProps, type ReactNode } from 'react'
+import {
+  HardDriveDownload,
+  ImageOff,
+  LoaderCircle,
+  RefreshCw,
+  TriangleAlert,
+  WifiOff,
+} from 'lucide-react'
+import { useState, type ComponentProps, type ReactNode } from 'react'
 
 export const Route = createFileRoute('/downloading')({
   component: RouteComponent,
@@ -94,14 +113,116 @@ function ImageWithFallback(
   )
 }
 
-function RouteComponent() {
-  const { downloadEvents } = useDownloadEvent()
-
-  if (!downloadEvents.length) {
+function DownloadStreamNotice({
+  status,
+  payloadError,
+  onReconnect,
+}: {
+  status: DownloadEventStreamStatus
+  payloadError: DownloadEventPayloadError | null
+  onReconnect: () => void
+}) {
+  if (status === 'failed') {
     return (
+      <Alert variant="destructive" className="mb-4 shrink-0">
+        <WifiOff />
+        <AlertTitle>实时下载状态连接失败</AlertTitle>
+        <AlertDescription>
+          以下为最后一次收到的状态，页面仍在尝试自动重连。
+        </AlertDescription>
+        <AlertAction>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onReconnect}
+          >
+            重新连接
+          </Button>
+        </AlertAction>
+      </Alert>
+    )
+  }
+
+  if (payloadError) {
+    return (
+      <Alert variant="destructive" className="mb-4 shrink-0">
+        <TriangleAlert />
+        <AlertTitle>收到异常下载状态</AlertTitle>
+        <AlertDescription>
+          {payloadError.event === 'snapshot' ? '任务快照' : '任务更新'}
+          已被忽略：{payloadError.message}
+        </AlertDescription>
+        <AlertAction>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onReconnect}
+          >
+            重新连接
+          </Button>
+        </AlertAction>
+      </Alert>
+    )
+  }
+
+  if (status === 'reconnecting') {
+    return (
+      <Alert className="mb-4 shrink-0">
+        <RefreshCw className="animate-spin" />
+        <AlertTitle>实时连接已中断，正在自动重连</AlertTitle>
+        <AlertDescription>以下为最后一次收到的下载状态。</AlertDescription>
+      </Alert>
+    )
+  }
+
+  if (status === 'connecting') {
+    return (
+      <Alert className="mb-4 shrink-0">
+        <LoaderCircle className="animate-spin" />
+        <AlertTitle>正在连接实时下载状态</AlertTitle>
+      </Alert>
+    )
+  }
+
+  return null
+}
+
+function RouteComponent() {
+  const {
+    downloadEvents,
+    streamStatus,
+    hasSnapshot,
+    streamPayloadError,
+    reconnect,
+  } = useDownloadEvent()
+
+  let content: ReactNode
+
+  if (!hasSnapshot) {
+    content = (
       <Empty>
         <EmptyHeader>
-          <EmptyMedia variant={'icon'}>
+          <EmptyMedia variant="icon">
+            <LoaderCircle className="animate-spin" />
+          </EmptyMedia>
+          <EmptyTitle>
+            {streamStatus === 'failed'
+              ? '尚未获取下载状态'
+              : '正在同步下载任务'}
+          </EmptyTitle>
+          <EmptyDescription>
+            连接恢复后会自动获取完整的下载任务快照
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    )
+  } else if (!downloadEvents.length) {
+    content = (
+      <Empty>
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
             <HardDriveDownload />
           </EmptyMedia>
           <EmptyTitle>暂无下载任务</EmptyTitle>
@@ -111,69 +232,49 @@ function RouteComponent() {
         </EmptyHeader>
       </Empty>
     )
+  } else {
+    content = (
+      <>
+        <div className="mb-4">
+          <p className="text-muted-foreground">
+            共 {downloadEvents.length} 个任务
+          </p>
+        </div>
+        <ItemGroup className="gap-2">
+          {downloadEvents.map((de) => (
+            <Item key={de.episode.id} variant="outline" role="listitem">
+              <ItemMedia variant="image">
+                <ImageWithFallback
+                  src={`/api/episodes/${de.episode.id}/cover`}
+                  width={32}
+                  height={32}
+                  className="object-cover"
+                  fallback={<ImageOff className="size-4" />}
+                />
+              </ItemMedia>
+              <ItemContent>
+                <ItemTitle className="line-clamp-1">
+                  第 {de.episode.episode} 集 - {de.episode.sn}
+                </ItemTitle>
+                <ItemDescription>
+                  <DownloadStatus de={de} />
+                </ItemDescription>
+              </ItemContent>
+            </Item>
+          ))}
+        </ItemGroup>
+      </>
+    )
   }
 
   return (
-    <div className="pr-2 pb-2">
-      <div className="mb-4">
-        <p className="text-muted-foreground">
-          共 {downloadEvents.length} 个任务
-        </p>
-      </div>
-      <ItemGroup className="gap-2">
-        {downloadEvents.map((de) => (
-          <Item key={de.episode.id} variant={'outline'} role="listitem">
-            <ItemMedia variant={'image'}>
-              <ImageWithFallback
-                src={`/api/episodes/${de.episode.id}/cover`}
-                width={32}
-                height={32}
-                className="object-cover"
-                fallback={<ImageOff className="size-4" />}
-              />
-            </ItemMedia>
-            <ItemContent>
-              <ItemTitle className="line-clamp-1">
-                第 {de.episode.episode} 集 - {de.episode.sn}
-              </ItemTitle>
-              <ItemDescription>
-                <DownloadStatus de={de} />
-              </ItemDescription>
-            </ItemContent>
-          </Item>
-        ))}
-      </ItemGroup>
+    <div className="flex size-full flex-col pr-2 pb-2">
+      <DownloadStreamNotice
+        status={streamStatus}
+        payloadError={streamPayloadError}
+        onReconnect={reconnect}
+      />
+      {content}
     </div>
   )
-}
-
-function useDownloadEvent() {
-  const [downloadEventMap, setDownloadEventMap] = useState<
-    Map<number, DownloadEvent>
-  >(() => new Map())
-
-  const downloadEvents = Array.from(downloadEventMap.values())
-
-  useEffect(() => {
-    const es = new EventSource('/api/episodes/download/events')
-    function snapshotHandler(this: EventSource, ev: MessageEvent) {
-      const dataEvents = JSON.parse(ev.data) as DownloadEvent[]
-      setDownloadEventMap(new Map(dataEvents.map((de) => [de.episode.sn, de])))
-    }
-    function updateHandler(this: EventSource, ev: MessageEvent) {
-      const de = JSON.parse(ev.data) as DownloadEvent
-      setDownloadEventMap((prev) => new Map(prev).set(de.episode.sn, de))
-    }
-    es.addEventListener('snapshot', snapshotHandler)
-    es.addEventListener('update', updateHandler)
-    return () => {
-      es.removeEventListener('snapshot', snapshotHandler)
-      es.removeEventListener('update', updateHandler)
-      es.close()
-    }
-  }, [])
-
-  return {
-    downloadEvents,
-  }
 }
