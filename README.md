@@ -188,6 +188,41 @@ it.
 
 ## Container operations
 
+### Log level
+
+AniDock logs at `info` by default. Set the `RUST_LOG` environment variable to
+`error`, `warn`, `info`, `debug`, or `trace`, ordered from least to most
+verbose. You can also enable detailed logs only for a specific component; for
+example, `info,ani_dock_core=debug` keeps the default level at `info` while
+enabling `debug` logs for the core downloader and AniGamer requests.
+
+For Docker Compose, add the desired value to the deployment directory's
+`.env` file:
+
+```dotenv
+RUST_LOG=debug
+```
+
+Then recreate the service and follow its logs:
+
+```bash
+docker compose up -d --no-build
+docker compose logs -f ani-dock
+```
+
+`docker compose restart` does not reload environment variables. When using
+Docker directly, add `-e RUST_LOG=debug` to the `docker run` command and
+recreate the container. When running from source, set the variable on the
+command instead:
+
+```bash
+RUST_LOG=debug cargo run -p ani-dock-server
+```
+
+`debug` and `trace` logs can contain request URLs and other diagnostic details.
+Use them only while troubleshooting, return to `info` afterwards, and inspect
+logs for sensitive data before sharing them.
+
 ### Docker Compose
 
 ```bash
