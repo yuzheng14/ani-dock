@@ -14,7 +14,10 @@ pub(super) const NOT_FOUND_CACHE_CONTROL_VALUE: &str = "public, max-age=300";
 
 pub(super) fn response(request_headers: &HeaderMap, cover_image: CoverImage) -> Response {
     let CoverImage {
-        id, mime_type, bytes, ..
+        id,
+        mime_type,
+        bytes,
+        ..
     } = cover_image;
     // Cover image rows are immutable, so the row ID is a strong representation validator.
     let etag = format!("\"{id}\"");
@@ -24,10 +27,9 @@ pub(super) fn response(request_headers: &HeaderMap, cover_image: CoverImage) -> 
         ([(CONTENT_TYPE, mime_type)], bytes).into_response()
     };
 
-    response.headers_mut().insert(
-        CACHE_CONTROL,
-        HeaderValue::from_static(CACHE_CONTROL_VALUE),
-    );
+    response
+        .headers_mut()
+        .insert(CACHE_CONTROL, HeaderValue::from_static(CACHE_CONTROL_VALUE));
     response.headers_mut().insert(
         ETAG,
         HeaderValue::from_str(&etag).expect("UUID-based ETag should be a valid header value"),

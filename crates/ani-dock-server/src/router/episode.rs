@@ -287,7 +287,10 @@ mod cover_tests {
         .expect("first cover request should succeed");
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers()[CONTENT_TYPE], "image/png");
-        assert_eq!(response.headers()[CACHE_CONTROL], cover::CACHE_CONTROL_VALUE);
+        assert_eq!(
+            response.headers()[CACHE_CONTROL],
+            cover::CACHE_CONTROL_VALUE
+        );
         let etag = response.headers()[ETAG].clone();
         let bytes = to_bytes(response.into_body(), usize::MAX)
             .await
@@ -326,13 +329,10 @@ mod cover_tests {
             IF_NONE_MATCH,
             HeaderValue::from_static("\"different-cover\""),
         );
-        let cached_response = get_cover(
-            State(state),
-            Path(episode.sn.to_string()),
-            request_headers,
-        )
-        .await
-        .expect("non-matching ETag should return the cached cover");
+        let cached_response =
+            get_cover(State(state), Path(episode.sn.to_string()), request_headers)
+                .await
+                .expect("non-matching ETag should return the cached cover");
         assert_eq!(cached_response.status(), StatusCode::OK);
         assert_eq!(cached_response.headers()[ETAG], etag);
         let cached_bytes = to_bytes(cached_response.into_body(), usize::MAX)
@@ -346,13 +346,9 @@ mod cover_tests {
         let episode = insert_episode(&pool, "").await;
         let state = app_state(pool);
 
-        let response = get_cover(
-            State(state),
-            Path(episode.id.to_string()),
-            HeaderMap::new(),
-        )
-        .await
-        .expect("empty episode cover should produce an HTTP response");
+        let response = get_cover(State(state), Path(episode.id.to_string()), HeaderMap::new())
+            .await
+            .expect("empty episode cover should produce an HTTP response");
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
         assert_eq!(

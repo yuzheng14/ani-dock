@@ -88,12 +88,7 @@ pub async fn get_cover(
             .await
             .context("查询封面数据库出错")?
     } else {
-        let Some(episode) = state
-            .db
-            .episode
-            .select_one_by_anime_id(anime.id)
-            .await?
-        else {
+        let Some(episode) = state.db.episode.select_one_by_anime_id(anime.id).await? else {
             return Ok(cover::not_found());
         };
 
@@ -179,7 +174,10 @@ mod tests {
         .expect("first cover request should succeed");
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(response.headers()[CONTENT_TYPE], "image/webp");
-        assert_eq!(response.headers()[CACHE_CONTROL], cover::CACHE_CONTROL_VALUE);
+        assert_eq!(
+            response.headers()[CACHE_CONTROL],
+            cover::CACHE_CONTROL_VALUE
+        );
         let etag = response.headers()[ETAG].clone();
         let bytes = to_bytes(response.into_body(), usize::MAX)
             .await
@@ -229,13 +227,9 @@ mod tests {
 
         let mut request_headers = HeaderMap::new();
         request_headers.insert(IF_NONE_MATCH, etag);
-        let not_modified = get_cover(
-            State(state),
-            Path(anime.id.to_string()),
-            request_headers,
-        )
-        .await
-        .expect("matching ETag should succeed");
+        let not_modified = get_cover(State(state), Path(anime.id.to_string()), request_headers)
+            .await
+            .expect("matching ETag should succeed");
         assert_eq!(not_modified.status(), StatusCode::NOT_MODIFIED);
         assert_eq!(
             not_modified.headers()[ETAG]
