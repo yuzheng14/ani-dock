@@ -11,6 +11,7 @@ use ani_dock_server::{
     router::{AppState, DbRepository, get_app_router},
     service::{Downloader, Services},
 };
+use anyhow::Context;
 use axum::serve;
 use tracing_subscriber::EnvFilter;
 
@@ -49,6 +50,14 @@ async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
         cookie,
         request_client,
     };
+
+    let restored = state
+        .services
+        .download
+        .restore_pending_downloads(&state.db.anime)
+        .await
+        .context("恢复待下载队列失败")?;
+    tracing::info!(restored, "待下载队列恢复完成");
 
     let app = get_app_router(state);
 

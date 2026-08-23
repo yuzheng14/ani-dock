@@ -13,7 +13,7 @@ use axum::{
         Response, Sse,
         sse::{Event, KeepAlive},
     },
-    routing::{get, post, put},
+    routing::{get, put},
 };
 use futures::{Stream, StreamExt, future::try_join_all, stream};
 use serde::Serialize;
@@ -30,7 +30,6 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/download", put(download))
         .route("/undownloaded", get(get_undownload_episodes))
-        .route("/download/restore", post(restore_download_list))
         .route("/download/events", get(download_events))
         .route("/{id_or_sn}/cover", get(get_cover))
 }
@@ -64,22 +63,6 @@ pub async fn download(
     }
 
     Ok(StatusCode::ACCEPTED)
-}
-
-pub async fn restore_download_list(State(state): State<AppState>) -> ApiResult {
-    let undownloaded_animes = state.db.anime.select_by_download_status(false).await?;
-
-    undownloaded_animes.into_iter().for_each(|anime| {
-        anime.series.into_iter().for_each(|(_, episodes)| {
-            episodes.into_iter().for_each(|episode| {
-                if !state.services.download.exists(episode.sn) {
-                    state.services.download.schedule_download(episode.into())
-                }
-            })
-        })
-    });
-
-    Ok(())
 }
 
 pub async fn get_undownload_episodes(
