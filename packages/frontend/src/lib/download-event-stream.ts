@@ -32,7 +32,6 @@ interface ObserveDownloadEventStreamOptions {
   onStatusChange(status: DownloadEventStreamStatus): void
   onPayloadError(error: DownloadEventPayloadError): void
   onFailure(): void
-  failureDelayMs?: number
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
