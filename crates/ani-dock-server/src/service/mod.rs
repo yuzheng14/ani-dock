@@ -384,11 +384,7 @@ mod tests {
         let config = Arc::new(Mutex::new(config));
         let inner = EpisodeDownloader::new(request_client, config, DeviceId::default());
 
-        Downloader::build(
-            inner,
-            DownloadQueueRepository::new(pool),
-            shutdown,
-        )
+        Downloader::build(inner, DownloadQueueRepository::new(pool), shutdown)
     }
 
     fn assert_queue_empty(worker: &mut DownloadWorker) {
@@ -662,8 +658,7 @@ mod tests {
         const SN: u32 = 78_901;
 
         let shutdown = CancellationToken::new();
-        let (downloader, worker) =
-            test_downloader_parts_with_shutdown(shutdown.clone()).await;
+        let (downloader, worker) = test_downloader_parts_with_shutdown(shutdown.clone()).await;
         shutdown.cancel();
         downloader.schedule_download(CoreEpisode::new(SN, 1, ""));
 
