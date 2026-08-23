@@ -9,16 +9,15 @@ use ani_dock_core::{
 };
 use ani_dock_db::{
     input::CreateCoverImage,
+    model::CoverImage,
     repository::{CoverImageRepository, DownloadQueueRepository},
 };
 use anyhow::Context;
-use axum::body::Bytes;
 use indexmap::{IndexMap, map::Entry};
 use tokio::{
     sync::{Semaphore, broadcast},
     time,
 };
-use uuid::Uuid;
 use wreq::header::REFERER;
 
 use crate::CoreEpisode;
@@ -178,7 +177,7 @@ pub async fn request_cover(
     cover_image_repo: &CoverImageRepository,
     url: &str,
     sn: u32,
-) -> anyhow::Result<(String, Bytes, Uuid)> {
+) -> anyhow::Result<CoverImage> {
     let cover_resp = request_client
         .get(url, false)
         .header(REFERER, get_referer(sn))
@@ -214,7 +213,7 @@ pub async fn request_cover(
         .await
         .context("存储封面数据失败")?;
 
-    Ok((cover_image.mime_type, cover_image.bytes, cover_image.id))
+    Ok(cover_image)
 }
 
 #[cfg(test)]

@@ -11,6 +11,7 @@ use tower_http::services::{ServeDir, ServeFile};
 use crate::{router::health::health, service::Services};
 
 mod anime;
+mod cover;
 mod episode;
 mod health;
 mod settings;
