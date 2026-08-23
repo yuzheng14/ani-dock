@@ -17,22 +17,10 @@ import { createRootRoute, Link, Outlet } from '@tanstack/react-router'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { HardDriveDownload, LibraryBig, Settings } from 'lucide-react'
-import { useEffect, type CSSProperties } from 'react'
-import { toast } from '@/components/ui/toast'
+import type { CSSProperties } from 'react'
 
 function AppSidebar() {
   const { setOpenMobile } = useSidebar()
-
-  useEffect(() => {
-    fetch('/api/episodes/download/restore', {
-      method: 'POST',
-    }).catch(() => {
-      toast.add({
-        type: 'error',
-        description: '恢复下载队列失败',
-      })
-    })
-  }, [])
 
   return (
     <Sidebar variant="floating" collapsible="icon">

@@ -10,7 +10,7 @@ use ani_dock_core::{
 use ani_dock_db::{
     input::CreateCoverImage,
     model::CoverImage,
-    repository::{CoverImageRepository, DownloadQueueRepository},
+    repository::{AnimeRepository, CoverImageRepository, DbResult, DownloadQueueRepository},
 };
 use anyhow::Context;
 use indexmap::{IndexMap, map::Entry};
@@ -153,6 +153,24 @@ impl Downloader {
         });
     }
 
+    pub async fn restore_pending_downloads(&self, repo: &AnimeRepository) -> DbResult<usize> {
+        let undownloaded_animes = repo.select_by_download_status(false).await?;
+        let mut restored = 0;
+
+        for anime in undownloaded_animes {
+            for (_, episodes) in anime.series {
+                for episode in episodes {
+                    if !self.exists(episode.sn) {
+                        self.schedule_download(episode.into());
+                        restored += 1;
+                    }
+                }
+            }
+        }
+
+        Ok(restored)
+    }
+
     pub fn exists(&self, sn: u32) -> bool {
         matches!(self.state_map.lock().unwrap().entry(sn), Entry::Occupied(_))
     }
@@ -254,11 +272,24 @@ mod tests {
     };
 
     use ani_dock_core::{Config, Cookie, DeviceId, RequestClient};
+    use ani_dock_db::{
+        input::{CreateAnime, CreateEpisode},
+        repository::AnimeRepository,
+    };
+    use sqlx::SqlitePool;
     use tokio::sync::Barrier;
 
     use super::*;
 
     async fn test_downloader_parts() -> (Downloader, DownloadWorker) {
+        let pool = SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("in-memory sqlite should connect");
+
+        test_downloader_parts_with_pool(pool)
+    }
+
+    fn test_downloader_parts_with_pool(pool: SqlitePool) -> (Downloader, DownloadWorker) {
         let config = Config {
             proxy: Some("http://127.0.0.1:1".to_string()),
             ..Config::default()
@@ -266,9 +297,6 @@ mod tests {
         let request_client = Arc::new(RequestClient::new(&config, Cookie::default()).unwrap());
         let config = Arc::new(Mutex::new(config));
         let inner = EpisodeDownloader::new(request_client, config, DeviceId::default());
-        let pool = sqlx::SqlitePool::connect("sqlite::memory:")
-            .await
-            .expect("in-memory sqlite should connect");
 
         Downloader::build(inner, DownloadQueueRepository::new(pool))
     }
@@ -278,6 +306,81 @@ mod tests {
             worker.queue_rx.try_recv(),
             Err(mpsc::error::TryRecvError::Empty)
         ));
+    }
+
+    #[sqlx::test(migrations = "../ani-dock-db/migrations")]
+    async fn restore_pending_downloads_schedules_persisted_work_without_http_request(
+        pool: SqlitePool,
+    ) {
+        const PENDING_SN: u32 = 12_345;
+        const DOWNLOADED_SN: u32 = 23_456;
+
+        let anime_repo = AnimeRepository::new(pool.clone());
+        anime_repo
+            .insert(CreateAnime {
+                sn: PENDING_SN,
+                cover: "https://example.com/anime.jpg".to_owned(),
+                name: "测试动画".to_owned(),
+                series: IndexMap::from([(
+                    "本篇".to_owned(),
+                    vec![
+                        CreateEpisode {
+                            sn: PENDING_SN,
+                            cover: "https://example.com/pending.jpg".to_owned(),
+                            episode: 1,
+                        },
+                        CreateEpisode {
+                            sn: DOWNLOADED_SN,
+                            cover: "https://example.com/downloaded.jpg".to_owned(),
+                            episode: 2,
+                        },
+                    ],
+                )]),
+            })
+            .await
+            .expect("anime fixture should be inserted");
+
+        let queue_repo = DownloadQueueRepository::new(pool.clone());
+        for (sn, episode) in [(PENDING_SN, 1), (DOWNLOADED_SN, 2)] {
+            assert!(
+                queue_repo
+                    .insert_by_episode_or_ignore(CoreEpisode::new(sn, episode, ""))
+                    .await
+                    .expect("episode should be queued")
+            );
+        }
+        queue_repo
+            .mark_downloaded(DOWNLOADED_SN)
+            .await
+            .expect("downloaded fixture should be marked completed");
+
+        let (downloader, mut worker) = test_downloader_parts_with_pool(pool);
+
+        assert_eq!(
+            downloader
+                .restore_pending_downloads(&anime_repo)
+                .await
+                .expect("pending downloads should be restored"),
+            1
+        );
+        assert_eq!(
+            worker
+                .queue_rx
+                .try_recv()
+                .expect("pending download should be queued")
+                .sn(),
+            PENDING_SN
+        );
+        assert_queue_empty(&mut worker);
+
+        assert_eq!(
+            downloader
+                .restore_pending_downloads(&anime_repo)
+                .await
+                .expect("repeated restoration should succeed"),
+            0
+        );
+        assert_queue_empty(&mut worker);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
