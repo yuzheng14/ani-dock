@@ -2,14 +2,18 @@ use ani_dock_db::model::Anime;
 use anyhow::Context;
 use axum::{
     Json, Router,
-    body::Bytes,
     extract::{Path, Query, State},
-    http::{HeaderName, StatusCode, header::CONTENT_TYPE},
+    http::{HeaderMap, StatusCode},
+    response::Response,
     routing::get,
 };
 use serde::Deserialize;
 
-use crate::{ApiError, ApiResult, router::AppState, service::request_cover};
+use crate::{
+    ApiResult,
+    router::{AppState, cover},
+    service::request_cover,
+};
 
 // pub async fn save_anime(
 //     State(state): State<AppState>,
@@ -64,32 +68,36 @@ pub async fn select_animes(
 pub async fn get_cover(
     State(state): State<AppState>,
     Path(id_or_sn): Path<String>,
-) -> ApiResult<([(HeaderName, String); 1], Bytes)> {
-    let anime = state
+    request_headers: HeaderMap,
+) -> ApiResult<Response> {
+    let Some(anime) = state
         .db
         .anime
         .select_row_by_id_or_sn(&id_or_sn)
         .await
         .context("查询动画数据出错")?
-        .ok_or(ApiError::NotFound)?;
+    else {
+        return Ok(cover::not_found());
+    };
 
-    let (mime_type, bytes) = if let Some(cover_id) = anime.cover_id {
-        let cover_image = state
+    let cover_image = if let Some(cover_id) = anime.cover_id {
+        state
             .db
             .cover_image
             .select_one(&cover_id.to_string())
             .await
-            .context("查询封面数据库出错")?;
-        (cover_image.mime_type, cover_image.bytes)
+            .context("查询封面数据库出错")?
     } else {
-        let episode = state
+        let Some(episode) = state
             .db
             .episode
             .select_one_by_anime_id(anime.id)
             .await?
-            .ok_or(ApiError::NotFound)?;
+        else {
+            return Ok(cover::not_found());
+        };
 
-        let (mime_type, bytes, cover_id) = request_cover(
+        let cover_image = request_cover(
             &state.request_client,
             &state.db.cover_image,
             &anime.cover,
@@ -100,14 +108,14 @@ pub async fn get_cover(
         state
             .db
             .anime
-            .update_cover_id(anime.id, cover_id)
+            .update_cover_id(anime.id, cover_image.id)
             .await
             .context("更新剧集的封面资源引用出错")?;
 
-        (mime_type, bytes)
+        cover_image
     };
 
-    Ok(([(CONTENT_TYPE, mime_type)], bytes))
+    Ok(cover::response(&request_headers, cover_image))
 }
 
 #[cfg(test)]
@@ -116,7 +124,11 @@ mod tests {
         input::{CreateAnime, CreateEpisode},
         repository::AnimeRepository,
     };
-    use axum::extract::{Path, State};
+    use axum::{
+        body::to_bytes,
+        extract::{Path, State},
+        http::header::{CACHE_CONTROL, CONTENT_TYPE, ETAG, IF_NONE_MATCH},
+    };
     use indexmap::IndexMap;
     use sqlx::SqlitePool;
 
@@ -158,10 +170,20 @@ mod tests {
         assert_eq!(anime.cover_id, None);
         let state = app_state(pool);
 
-        let (headers, bytes) = get_cover(State(state.clone()), Path(anime.id.to_string()))
+        let response = get_cover(
+            State(state.clone()),
+            Path(anime.id.to_string()),
+            HeaderMap::new(),
+        )
+        .await
+        .expect("first cover request should succeed");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()[CONTENT_TYPE], "image/webp");
+        assert_eq!(response.headers()[CACHE_CONTROL], cover::CACHE_CONTROL_VALUE);
+        let etag = response.headers()[ETAG].clone();
+        let bytes = to_bytes(response.into_body(), usize::MAX)
             .await
-            .expect("first cover request should succeed");
-        assert_eq!(headers, [(CONTENT_TYPE, "image/webp".to_owned())]);
+            .expect("cover response body should be readable");
         assert_eq!(bytes.as_ref(), IMAGE_BYTES);
 
         let stored_anime = state
@@ -183,21 +205,70 @@ mod tests {
         assert_eq!(stored_cover.url, image_server.url());
         assert_eq!(stored_cover.mime_type, "image/webp");
         assert_eq!(stored_cover.bytes.as_ref(), IMAGE_BYTES);
+        let expected_etag = format!("\"{cover_id}\"");
+        assert_eq!(
+            etag.to_str().expect("ETag should contain valid text"),
+            expected_etag.as_str()
+        );
         assert_eq!(image_server.request_count(), 1);
         drop(image_server);
 
-        let (_, cached_bytes) = get_cover(State(state), Path(anime.sn.to_string()))
+        let cached_response = get_cover(
+            State(state.clone()),
+            Path(anime.sn.to_string()),
+            HeaderMap::new(),
+        )
+        .await
+        .expect("cached cover request should succeed by anime sn");
+        assert_eq!(cached_response.status(), StatusCode::OK);
+        assert_eq!(cached_response.headers()[ETAG], etag);
+        let cached_bytes = to_bytes(cached_response.into_body(), usize::MAX)
             .await
-            .expect("cached cover request should succeed by anime sn");
+            .expect("cached cover response body should be readable");
         assert_eq!(cached_bytes.as_ref(), IMAGE_BYTES);
+
+        let mut request_headers = HeaderMap::new();
+        request_headers.insert(IF_NONE_MATCH, etag);
+        let not_modified = get_cover(
+            State(state),
+            Path(anime.id.to_string()),
+            request_headers,
+        )
+        .await
+        .expect("matching ETag should succeed");
+        assert_eq!(not_modified.status(), StatusCode::NOT_MODIFIED);
+        assert_eq!(
+            not_modified.headers()[ETAG]
+                .to_str()
+                .expect("ETag should contain valid text"),
+            expected_etag.as_str()
+        );
+        assert_eq!(
+            not_modified.headers()[CACHE_CONTROL],
+            cover::CACHE_CONTROL_VALUE
+        );
+        assert!(
+            to_bytes(not_modified.into_body(), usize::MAX)
+                .await
+                .expect("not modified response body should be readable")
+                .is_empty()
+        );
     }
 
     #[sqlx::test(migrations = "../ani-dock-db/migrations")]
     async fn get_cover_returns_not_found_for_unknown_anime(pool: SqlitePool) {
-        let error = get_cover(State(app_state(pool)), Path("99999".to_owned()))
-            .await
-            .expect_err("unknown anime should not have a cover");
+        let response = get_cover(
+            State(app_state(pool)),
+            Path("99999".to_owned()),
+            HeaderMap::new(),
+        )
+        .await
+        .expect("unknown anime should produce an HTTP response");
 
-        assert!(matches!(error, ApiError::NotFound));
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            response.headers()[CACHE_CONTROL],
+            cover::NOT_FOUND_CACHE_CONTROL_VALUE
+        );
     }
 }
