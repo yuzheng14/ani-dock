@@ -5,9 +5,9 @@ use ani_dock_db::repository::{
     AnimeRepository, CoverImageRepository, DownloadQueueRepository, EpisodeRepository,
 };
 use axum::{Router, http::StatusCode, routing::get};
+use tokio_util::sync::CancellationToken;
 #[cfg(not(debug_assertions))]
 use tower_http::services::{ServeDir, ServeFile};
-use tokio_util::sync::CancellationToken;
 
 use crate::{router::health::health, service::Services};
 
