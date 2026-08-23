@@ -25,14 +25,6 @@ interface DownloadEventSource {
   close(): void
 }
 
-interface DownloadEventStreamScheduler {
-  setTimeout(
-    callback: () => void,
-    delayMs: number
-  ): ReturnType<typeof globalThis.setTimeout>
-  clearTimeout(handle: ReturnType<typeof globalThis.setTimeout>): void
-}
-
 interface ObserveDownloadEventStreamOptions {
   source: DownloadEventSource
   onSnapshot(events: DownloadEvent[]): void
@@ -41,12 +33,6 @@ interface ObserveDownloadEventStreamOptions {
   onPayloadError(error: DownloadEventPayloadError): void
   onFailure(): void
   failureDelayMs?: number
-  scheduler?: DownloadEventStreamScheduler
-}
-
-const defaultScheduler: DownloadEventStreamScheduler = {
-  setTimeout: (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
-  clearTimeout: (handle) => globalThis.clearTimeout(handle),
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -139,11 +125,9 @@ export function observeDownloadEventStream({
   onStatusChange,
   onPayloadError,
   onFailure,
-  failureDelayMs = DOWNLOAD_EVENT_STREAM_FAILURE_DELAY_MS,
-  scheduler = defaultScheduler,
 }: ObserveDownloadEventStreamOptions): () => void {
   let status: DownloadEventStreamStatus = 'connecting'
-  let failureTimer: ReturnType<typeof globalThis.setTimeout> | undefined
+  let failureTimer: ReturnType<typeof window.setTimeout> | undefined
   let disposed = false
 
   const setStatus = (nextStatus: DownloadEventStreamStatus) => {
@@ -160,7 +144,7 @@ export function observeDownloadEventStream({
       return
     }
 
-    scheduler.clearTimeout(failureTimer)
+    window.clearTimeout(failureTimer)
     failureTimer = undefined
   }
 
@@ -199,9 +183,9 @@ export function observeDownloadEventStream({
     }
 
     setStatus('reconnecting')
-    failureTimer ??= scheduler.setTimeout(
+    failureTimer ??= window.setTimeout(
       reportProlongedFailure,
-      failureDelayMs
+      DOWNLOAD_EVENT_STREAM_FAILURE_DELAY_MS
     )
   }
 

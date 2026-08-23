@@ -1,26 +1,28 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import type { DownloadEvent } from '@ani-dock/shared-type'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 import {
+  DOWNLOAD_EVENT_STREAM_FAILURE_DELAY_MS,
   DownloadEventPayloadError,
+  type DownloadEventStreamStatus,
   observeDownloadEventStream,
-} from '../src/lib/download-event-stream.ts'
+} from '../src/lib/download-event-stream'
 
 class FakeEventSource {
-  CONNECTING = 0
-  OPEN = 1
-  CLOSED = 2
+  readonly CONNECTING = 0
+  readonly OPEN = 1
+  readonly CLOSED = 2
   readyState = this.CONNECTING
   closeCalls = 0
-  listeners = new Map()
+  private readonly listeners = new Map<string, Set<EventListener>>()
 
-  addEventListener(type, listener) {
-    const listeners = this.listeners.get(type) ?? new Set()
+  addEventListener(type: string, listener: EventListener) {
+    const listeners = this.listeners.get(type) ?? new Set<EventListener>()
     listeners.add(listener)
     this.listeners.set(type, listeners)
   }
 
-  removeEventListener(type, listener) {
+  removeEventListener(type: string, listener: EventListener) {
     this.listeners.get(type)?.delete(listener)
   }
 
@@ -29,9 +31,10 @@ class FakeEventSource {
     this.readyState = this.CLOSED
   }
 
-  emit(type, data) {
+  emit(type: string, data?: string) {
+    const event = new MessageEvent(type, { data })
     for (const listener of this.listeners.get(type) ?? []) {
-      listener.call(this, { data, type })
+      listener(event)
     }
   }
 
@@ -43,30 +46,18 @@ class FakeEventSource {
   }
 }
 
-class FakeScheduler {
-  nextId = 0
-  tasks = new Map()
-
-  setTimeout(callback) {
-    const id = ++this.nextId
-    this.tasks.set(id, callback)
-    return id
-  }
-
-  clearTimeout(id) {
-    this.tasks.delete(id)
-  }
-
-  runAll() {
-    const tasks = Array.from(this.tasks.values())
-    this.tasks.clear()
-    for (const task of tasks) {
-      task()
-    }
-  }
+type ObserveOverrides = {
+  onSnapshot?(events: DownloadEvent[]): void
+  onUpdate?(event: DownloadEvent): void
+  onStatusChange?(status: DownloadEventStreamStatus): void
+  onPayloadError?(error: DownloadEventPayloadError): void
+  onFailure?(): void
 }
 
-function downloadEvent(sn, state = { Ok: { type: 'PENDING' } }) {
+function downloadEvent(
+  sn: number,
+  state: DownloadEvent['state'] = { Ok: { type: 'PENDING' } }
+): DownloadEvent {
   return {
     episode: {
       id: `episode-${sn}`,
@@ -81,7 +72,7 @@ function downloadEvent(sn, state = { Ok: { type: 'PENDING' } }) {
   }
 }
 
-function observe(source, overrides = {}) {
+function observe(source: FakeEventSource, overrides: ObserveOverrides = {}) {
   return observeDownloadEventStream({
     source,
     onSnapshot: () => {},
@@ -93,18 +84,23 @@ function observe(source, overrides = {}) {
   })
 }
 
+beforeEach(() => {
+  vi.useFakeTimers()
+})
+
+afterEach(() => {
+  vi.clearAllTimers()
+  vi.useRealTimers()
+})
+
 test('tracks reconnection attempts and reports only prolonged failures', () => {
   const source = new FakeEventSource()
-  const scheduler = new FakeScheduler()
-  const statuses = []
-  let failures = 0
+  const statuses: DownloadEventStreamStatus[] = []
+  const onFailure = vi.fn()
 
   const stop = observe(source, {
-    scheduler,
     onStatusChange: (status) => statuses.push(status),
-    onFailure: () => {
-      failures += 1
-    },
+    onFailure,
   })
 
   source.readyState = source.OPEN
@@ -113,21 +109,19 @@ test('tracks reconnection attempts and reports only prolonged failures', () => {
   source.emit('error')
   source.emit('error')
 
-  assert.deepEqual(statuses, ['connecting', 'open', 'reconnecting'])
-  assert.equal(scheduler.tasks.size, 1)
-  assert.equal(failures, 0)
+  expect(statuses).toEqual(['connecting', 'open', 'reconnecting'])
+  expect(vi.getTimerCount()).toBe(1)
+  expect(onFailure).not.toHaveBeenCalled()
 
   source.readyState = source.OPEN
   source.emit('open')
-  assert.equal(scheduler.tasks.size, 0)
+  expect(vi.getTimerCount()).toBe(0)
 
   source.readyState = source.CONNECTING
   source.emit('error')
-  scheduler.runAll()
-  source.emit('error')
-  scheduler.runAll()
+  vi.advanceTimersByTime(DOWNLOAD_EVENT_STREAM_FAILURE_DELAY_MS)
 
-  assert.deepEqual(statuses, [
+  expect(statuses).toEqual([
     'connecting',
     'open',
     'reconnecting',
@@ -135,27 +129,23 @@ test('tracks reconnection attempts and reports only prolonged failures', () => {
     'reconnecting',
     'failed',
   ])
-  assert.equal(failures, 1)
+  expect(onFailure).toHaveBeenCalledOnce()
 
   source.readyState = source.OPEN
   source.emit('open')
-  assert.equal(statuses.at(-1), 'open')
+  expect(statuses.at(-1)).toBe('open')
 
   stop()
 })
 
 test('reports a terminal connection failure immediately', () => {
   const source = new FakeEventSource()
-  const scheduler = new FakeScheduler()
-  const statuses = []
-  let failures = 0
+  const statuses: DownloadEventStreamStatus[] = []
+  const onFailure = vi.fn()
 
   const stop = observe(source, {
-    scheduler,
     onStatusChange: (status) => statuses.push(status),
-    onFailure: () => {
-      failures += 1
-    },
+    onFailure,
   })
 
   source.readyState = source.OPEN
@@ -163,17 +153,17 @@ test('reports a terminal connection failure immediately', () => {
   source.readyState = source.CLOSED
   source.emit('error')
 
-  assert.deepEqual(statuses, ['connecting', 'open', 'failed'])
-  assert.equal(failures, 1)
-  assert.equal(scheduler.tasks.size, 0)
+  expect(statuses).toEqual(['connecting', 'open', 'failed'])
+  expect(onFailure).toHaveBeenCalledOnce()
+  expect(vi.getTimerCount()).toBe(0)
 
   stop()
 })
 
 test('accepts valid messages and isolates malformed payloads', () => {
   const source = new FakeEventSource()
-  const events = new Map()
-  const errors = []
+  const events = new Map<number, DownloadEvent>()
+  const errors: DownloadEventPayloadError[] = []
 
   const stop = observe(source, {
     onSnapshot: (snapshot) => {
@@ -192,42 +182,43 @@ test('accepts valid messages and isolates malformed payloads', () => {
   source.emit('snapshot', '{')
   source.emit('update', JSON.stringify({ episode: null }))
 
-  assert.deepEqual(Array.from(events.entries()), snapshot)
-  assert.equal(errors.length, 2)
-  assert.ok(errors.every((error) => error instanceof DownloadEventPayloadError))
-  assert.deepEqual(
-    errors.map((error) => error.messageType),
-    ['snapshot', 'update']
-  )
+  expect(Array.from(events.entries())).toEqual(snapshot)
+  expect(errors).toHaveLength(2)
+  expect(
+    errors.every((error) => error instanceof DownloadEventPayloadError)
+  ).toBe(true)
+  expect(errors.map((error) => error.messageType)).toEqual([
+    'snapshot',
+    'update',
+  ])
 
   source.emit(
     'update',
     JSON.stringify(downloadEvent(100, { Ok: { type: 'COMPLETED' } }))
   )
-  assert.deepEqual(events.get(100).state, { Ok: { type: 'COMPLETED' } })
+  expect(events.get(100)?.state).toEqual({ Ok: { type: 'COMPLETED' } })
 
   stop()
 })
 
 test('removes every listener and pending timer during cleanup', () => {
   const source = new FakeEventSource()
-  const scheduler = new FakeScheduler()
-  const statuses = []
+  const statuses: DownloadEventStreamStatus[] = []
 
   const stop = observe(source, {
-    scheduler,
     onStatusChange: (status) => statuses.push(status),
   })
 
   source.emit('error')
-  assert.equal(source.listenerCount(), 4)
-  assert.equal(scheduler.tasks.size, 1)
+  expect(source.listenerCount()).toBe(4)
+  expect(vi.getTimerCount()).toBe(1)
 
   stop()
-  scheduler.runAll()
+  expect(vi.getTimerCount()).toBe(0)
+  vi.runOnlyPendingTimers()
   source.emit('open')
 
-  assert.equal(source.listenerCount(), 0)
-  assert.equal(source.closeCalls, 1)
-  assert.deepEqual(statuses, ['connecting', 'reconnecting'])
+  expect(source.listenerCount()).toBe(0)
+  expect(source.closeCalls).toBe(1)
+  expect(statuses).toEqual(['connecting', 'reconnecting'])
 })
