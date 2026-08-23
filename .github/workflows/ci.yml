@@ -66,11 +66,21 @@ jobs:
         run: cargo check --locked --release --workspace --all-targets
 
   docker:
-    name: Docker
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    name: Docker ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     env:
-      ANI_DOCK_IMAGE: ani-dock:ci
+      ANI_DOCK_IMAGE: ani-dock:ci-${{ matrix.arch }}
 
     steps:
       - name: Checkout
@@ -83,11 +93,21 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
-          platforms: linux/amd64
+          platforms: ${{ matrix.platform }}
           load: true
-          tags: ani-dock:ci
-          cache-from: type=gha,scope=ani-dock-amd64
-          cache-to: type=gha,mode=max,scope=ani-dock-amd64
+          tags: ${{ env.ANI_DOCK_IMAGE }}
+          cache-from: type=gha,scope=ani-dock-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=ani-dock-${{ matrix.arch }}
+
+      - name: Scan Docker image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.ANI_DOCK_IMAGE }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: false
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
 
       - name: Start container
         run: docker compose up --detach --no-build
@@ -113,25 +133,3 @@ jobs:
       - name: Stop container
         if: always()
         run: docker compose down --volumes
-
-  docker-arm64-cache:
-    name: Docker arm64 cache
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Build Docker image cache
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: linux/arm64
-          outputs: type=cacheonly
-          cache-from: type=gha,scope=ani-dock-arm64
-          cache-to: type=gha,mode=max,scope=ani-dock-arm64
