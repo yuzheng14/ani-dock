@@ -4,7 +4,8 @@ use serde::de::DeserializeOwned;
 use thiserror::Error;
 use tokio::sync::watch;
 use wreq::{
-    Client, IntoUrl, RequestBuilder, Url,
+    Client, IntoUrl, Proxy, RequestBuilder, Url,
+    cookie::Jar,
     header::{ACCEPT, ACCEPT_ENCODING, ACCEPT_LANGUAGE, CACHE_CONTROL, CONTENT_TYPE, ORIGIN},
 };
 use wreq_util::Emulation;
@@ -55,29 +56,9 @@ fn add_cookie_header_to_jar(jar: &ObservableCookieJar, cookie_header: &str, url:
 
 impl RequestClient {
     pub fn new(config: &Config, cookie: Cookie) -> Result<Self, RequestError> {
-        let lowercase_ua = config.ua.to_ascii_lowercase();
-        let emulation = if lowercase_ua.contains("firefox") {
-            Emulation::Firefox109
-        } else if lowercase_ua.contains("edg") {
-            Emulation::Edge134
-        } else {
-            Emulation::Chrome137
-        };
+        let emulation = Self::get_emulation(&config.ua);
 
-        let (tx, mut rx) = watch::channel(String::new());
-        let cookie_store = Arc::new(ObservableCookieJar::new(ORIGIN_URL.clone(), tx));
-        add_cookie_header_to_jar(&cookie_store, cookie.as_str(), &ORIGIN_URL);
-
-        tokio::spawn(async move {
-            let mut cookie = cookie;
-            while rx.changed().await.is_ok() {
-                let cookie_string = rx.borrow_and_update().clone();
-                let result = cookie.set_and_write_cookie(cookie_string).await;
-                if let Err(error) = result {
-                    tracing::error!(error = %error, "存储 cookie 失败");
-                }
-            }
-        });
+        let cookie_store = Self::get_observable_cookie_jar(cookie);
 
         let mut cookie_builder = Client::builder()
             .emulation(emulation)
@@ -118,6 +99,64 @@ impl RequestClient {
             .header(ACCEPT_ENCODING, "gzip, deflate")
             .header(CACHE_CONTROL, "max-age=0")
             .header(ORIGIN, constant::ORIGIN)
+    }
+
+    pub fn update_proxy(&self, proxy: Option<String>) -> wreq::Result<()> {
+        if let Some(proxy) = proxy {
+            let proxy = Proxy::all(proxy)?;
+            self.cookie.update().proxies([proxy.clone()]).apply()?;
+            self.plain.update().proxies([proxy]).apply()
+        } else {
+            self.cookie.update().unset_proxies().apply()?;
+            self.plain.update().unset_proxies().apply()
+        }
+    }
+
+    pub fn update_ua(&self, ua: &str) -> wreq::Result<()> {
+        let emulation = Self::get_emulation(ua);
+        self.cookie.update().emulation(emulation).apply()?;
+        self.plain.update().emulation(emulation).apply()
+    }
+
+    pub fn update_cookies(&self, cookie: Cookie) -> wreq::Result<()> {
+        let cookie_store = Self::get_observable_cookie_jar(cookie);
+
+        self.cookie.update().cookie_provider(cookie_store).apply()?;
+        self.plain
+            .update()
+            .cookie_provider(Arc::new(Jar::default()))
+            .apply()
+    }
+
+    fn get_emulation(ua: &str) -> Emulation {
+        let lowercase_ua = ua.to_ascii_lowercase();
+
+        if lowercase_ua.contains("firefox") {
+            Emulation::Firefox109
+        } else if lowercase_ua.contains("edg") {
+            Emulation::Edge134
+        } else {
+            Emulation::Chrome137
+        }
+    }
+
+    fn get_observable_cookie_jar(cookie: Cookie) -> Arc<ObservableCookieJar> {
+        let (tx, mut rx) = watch::channel(String::new());
+        let cookie_store = Arc::new(ObservableCookieJar::new(ORIGIN_URL.clone(), tx));
+        add_cookie_header_to_jar(&cookie_store, &cookie.to_string(), &ORIGIN_URL);
+
+        tokio::spawn(async move {
+            let mut cookie = cookie;
+            while rx.changed().await.is_ok() {
+                let cookie_string = rx.borrow_and_update().clone();
+                let result = cookie.set_and_write_cookie(cookie_string).await;
+                if let Err(error) = result {
+                    tracing::error!(error = %error, "存储 cookie 失败");
+                }
+            }
+        });
+
+        cookie_store
     }
 }
 
@@ -176,6 +215,24 @@ mod test {
                 .expect("cookie header should be valid text")
                 .to_owned()
         })
+    }
+
+    fn client_cookie_header(client: &Client, url: &Url) -> Option<String> {
+        client.get_cookies(url).map(|cookies| {
+            cookies
+                .to_str()
+                .expect("cookie header should be valid text")
+                .to_owned()
+        })
+    }
+
+    fn config_without_system_proxy() -> Config {
+        Config {
+            // Avoid system proxy discovery while constructing a client in the isolated test
+            // environment. No request is sent, so this address is never contacted.
+            proxy: Some("http://127.0.0.1:1".to_string()),
+            ..Config::default()
+        }
     }
 
     #[test]
@@ -237,14 +294,8 @@ mod test {
 
     #[tokio::test]
     async fn get_adds_custom_headers_without_replacing_emulated_user_agent() {
-        let config = Config {
-            // Avoid system proxy discovery while constructing a client in the isolated test
-            // environment. No request is sent, so this address is never contacted.
-            proxy: Some("http://127.0.0.1:1".to_string()),
-            ..Config::default()
-        };
-        let client =
-            RequestClient::new(&config, Cookie::new("")).expect("request client should be created");
+        let client = RequestClient::new(&config_without_system_proxy(), Cookie::new(""))
+            .expect("request client should be created");
 
         assert!(client.plain.headers().contains_key(USER_AGENT));
 
@@ -275,6 +326,53 @@ mod test {
         assert_eq!(
             headers.get(ORIGIN).and_then(|value| value.to_str().ok()),
             Some(constant::ORIGIN)
+        );
+    }
+
+    #[tokio::test]
+    async fn update_cookies_replaces_the_store_used_by_authenticated_requests() {
+        let client = RequestClient::new(&config_without_system_proxy(), Cookie::new("session=old"))
+            .expect("request client should be created");
+
+        assert_eq!(
+            client_cookie_header(&client.cookie, &ORIGIN_URL),
+            Some("session=old".to_owned())
+        );
+
+        client
+            .update_cookies(Cookie::new("session=new"))
+            .expect("cookie store should be replaced");
+
+        let expected = Some("session=new".to_owned());
+        assert_eq!(client_cookie_header(&client.cookie, &ORIGIN_URL), expected);
+        assert_eq!(
+            client_cookie_header(&client.cookie, &constant::API_ORIGIN_URL),
+            expected
+        );
+        assert_eq!(client_cookie_header(&client.plain, &ORIGIN_URL), None);
+    }
+
+    #[tokio::test]
+    async fn update_cookies_clears_authenticated_store_when_switching_to_guest() {
+        let client = RequestClient::new(&config_without_system_proxy(), Cookie::default())
+            .expect("request client should be created");
+
+        client
+            .update_cookies(Cookie::new("session=authenticated"))
+            .expect("authenticated cookie store should be installed");
+        assert_eq!(
+            client_cookie_header(&client.cookie, &ORIGIN_URL),
+            Some("session=authenticated".to_owned())
+        );
+
+        client
+            .update_cookies(Cookie::default())
+            .expect("guest cookie store should be installed");
+
+        assert_eq!(client_cookie_header(&client.cookie, &ORIGIN_URL), None);
+        assert_eq!(
+            client_cookie_header(&client.cookie, &constant::API_ORIGIN_URL),
+            None
         );
     }
 }

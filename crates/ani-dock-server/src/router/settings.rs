@@ -1,4 +1,5 @@
 use ani_dock_core::{Config, Cookie, DownloadResolution, InternalConfig};
+use anyhow::Context;
 use axum::{Json, Router, extract::State, routing::get};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -71,24 +72,49 @@ pub fn router() -> Router<AppState> {
 async fn get_settings(State(state): State<AppState>) -> Json<Settings> {
     let settings = Settings {
         config: state.config.lock().unwrap().clone().into(),
-        cookie: state.cookie,
+        cookie: state.cookie.clone(),
     };
 
     Json(settings)
 }
 
+#[axum::debug_handler]
 async fn update_settings(
     State(mut state): State<AppState>,
     Json(settings): Json<Settings>,
 ) -> ApiResult {
     let config: Config = settings.config.into();
+    let Config { proxy, ua, .. } = state.config.lock().unwrap().clone();
+    let state_cookie = state.cookie.clone();
+
+    if config.proxy != proxy {
+        state
+            .request_client
+            .update_proxy(config.proxy.clone())
+            .context("更新请求客户端代理失败")?;
+    }
+
+    if config.ua != ua {
+        state
+            .request_client
+            .update_ua(&config.ua)
+            .context("更新请求客户端 ua 失败")?;
+    }
+
+    if settings.cookie != state_cookie {
+        state
+            .request_client
+            .update_cookies(settings.cookie.clone())
+            .context("更新请求客户端 cookie 失败")?;
+        state
+            .cookie
+            .set_and_write_cookie(settings.cookie.to_string())
+            .await
+            .context("更新 cookie 文件失败")?;
+    }
+
     config.write_config().await?;
     *state.config.lock().unwrap() = config.clone();
-
-    state
-        .cookie
-        .set_and_write_cookie(settings.cookie.0.clone())
-        .await?;
 
     Ok(())
 }
@@ -96,11 +122,13 @@ async fn update_settings(
 #[cfg(test)]
 mod tests {
     use ani_dock_core::{Config, ConfigVersion, Cookie, DownloadResolution, InternalConfig};
+    use axum::extract::State;
     use serde_json::json;
+    use sqlx::SqlitePool;
 
-    use crate::router::settings::SettingsConfig;
+    use crate::router::{settings::SettingsConfig, test_helpers::app_state_with_config};
 
-    use super::Settings;
+    use super::{Settings, get_settings};
 
     fn fixture_settings() -> Settings {
         Settings {
@@ -187,6 +215,28 @@ mod tests {
     #[test]
     fn settings_config_default_matches_config_default() {
         assert_eq!(Config::from(SettingsConfig::default()), Config::default());
+    }
+
+    #[tokio::test]
+    async fn get_settings_returns_the_latest_shared_in_memory_cookie() {
+        let pool = SqlitePool::connect("sqlite::memory:")
+            .await
+            .expect("in-memory sqlite should connect");
+        let state = app_state_with_config(
+            pool,
+            Config {
+                // Avoid consulting the host's system proxy configuration. This handler does not
+                // send requests, so the proxy address is never contacted.
+                proxy: Some("http://127.0.0.1:1".to_owned()),
+                ..Config::default()
+            },
+        );
+        let mut shared_cookie = state.cookie.clone();
+        shared_cookie.set_cookie("session=latest");
+
+        let settings = get_settings(State(state)).await.0;
+
+        assert_eq!(settings.cookie.to_string(), "session=latest");
     }
 
     #[test]

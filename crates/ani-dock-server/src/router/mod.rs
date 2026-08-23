@@ -73,8 +73,11 @@ pub(crate) mod test_helpers {
     use crate::service::{Downloader, Services};
 
     pub(crate) fn app_state(pool: SqlitePool) -> AppState {
+        app_state_with_config(pool, Config::default())
+    }
+
+    pub(crate) fn app_state_with_config(pool: SqlitePool, config: Config) -> AppState {
         let cookie = Cookie::default();
-        let config = Config::default();
         let request_client = Arc::new(
             RequestClient::new(&config, cookie.clone()).expect("test request client should build"),
         );

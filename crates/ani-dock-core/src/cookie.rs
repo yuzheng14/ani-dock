@@ -1,3 +1,8 @@
+use std::{
+    fmt::Display,
+    sync::{Arc, Mutex},
+};
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::fs;
@@ -16,29 +21,40 @@ pub enum CookieError {
     },
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
-pub struct Cookie(pub String);
+pub struct Cookie(Arc<Mutex<String>>);
+
+impl PartialEq for Cookie {
+    fn eq(&self, other: &Self) -> bool {
+        let cookie = self.0.lock().unwrap().to_owned();
+        cookie == other.0.lock().unwrap().to_owned()
+    }
+}
+
+impl Eq for Cookie {}
+
+impl Display for Cookie {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0.lock().unwrap().to_owned())
+    }
+}
 
 impl Cookie {
     pub fn new<T: Into<String>>(cookie: T) -> Self {
-        Self(cookie.into())
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    pub fn into_inner(self) -> String {
-        self.0
+        Self(Arc::new(Mutex::new(cookie.into())))
     }
 
     pub async fn set_and_write_cookie(
         &mut self,
         cookie: impl Into<String>,
     ) -> Result<(), CookieError> {
-        self.0 = cookie.into();
+        self.set_cookie(cookie);
         self.write_cookie().await
+    }
+
+    pub fn set_cookie(&mut self, cookie: impl Into<String>) {
+        *self.0.lock().unwrap() = cookie.into();
     }
 
     pub async fn write_cookie(&self) -> Result<(), CookieError> {
@@ -51,7 +67,8 @@ impl Cookie {
                 })?;
         }
 
-        fs::write(COOKIE_FILE_PATH.as_path(), &self.0)
+        let cookie_string = self.to_string();
+        fs::write(COOKIE_FILE_PATH.as_path(), cookie_string)
             .await
             .map_err(|source| CookieError::IO {
                 desp: "写入 cookie 文件失败".into(),
@@ -79,7 +96,9 @@ impl Cookie {
                 source,
             })?;
 
-        Ok(Cookie(contents.trim_end_matches(['\r', '\n']).to_string()))
+        Ok(Self::new(
+            contents.trim_end_matches(['\r', '\n']).to_string(),
+        ))
     }
 }
 
@@ -121,6 +140,17 @@ mod test {
         }
     }
 
+    #[test]
+    fn cloned_cookies_share_in_memory_updates() {
+        let cookie = Cookie::new("session=old");
+        let mut cloned = cookie.clone();
+
+        cloned.set_cookie("session=new");
+
+        assert_eq!(cookie.to_string(), "session=new");
+        assert_eq!(cookie, cloned);
+    }
+
     #[tokio::test]
     async fn read_cookie_returns_default_when_file_is_missing() -> Result<(), Box<dyn Error>> {
         let _cookie_file = TestCookieFile::new();
@@ -128,7 +158,7 @@ mod test {
         let cookie = Cookie::read_cookie().await?;
 
         assert_eq!(cookie, Cookie::default());
-        assert_eq!(cookie.as_str(), "");
+        assert_eq!(cookie.to_string(), "");
 
         Ok(())
     }
@@ -142,7 +172,7 @@ mod test {
         let actual = Cookie::read_cookie().await?;
 
         assert_eq!(actual, expected);
-        assert_eq!(actual.as_str(), "foo=bar; session=123");
+        assert_eq!(actual.to_string(), "foo=bar; session=123");
 
         Ok(())
     }
@@ -154,7 +184,7 @@ mod test {
 
         let cookie = Cookie::read_cookie().await?;
 
-        assert_eq!(cookie.into_inner(), "foo=bar");
+        assert_eq!(cookie.to_string(), "foo=bar");
 
         Ok(())
     }
