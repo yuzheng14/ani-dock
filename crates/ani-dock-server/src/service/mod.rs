@@ -137,17 +137,12 @@ impl DownloadWorker {
     }
 }
 
-#[derive(Debug)]
-struct DownloadLifecycle {
-    worker_task: Mutex<Option<JoinHandle<()>>>,
-}
-
 #[derive(Debug, Clone)]
 pub struct Downloader {
     state_map: Arc<Mutex<StateMap>>,
     queue_tx: mpsc::UnboundedSender<CoreEpisode>,
     tx: broadcast::Sender<DownloadStatus>,
-    lifecycle: Arc<DownloadLifecycle>,
+    worker_task: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 impl Downloader {
@@ -159,7 +154,6 @@ impl Downloader {
         let (downloader, worker) = Self::build(episode_downloader, repo, shutdown);
         let worker_task = tokio::spawn(worker.run());
         downloader
-            .lifecycle
             .worker_task
             .lock()
             .unwrap()
@@ -179,9 +173,7 @@ impl Downloader {
         let (tx, _) = broadcast::channel(128);
         let (queue_tx, queue_rx) = mpsc::unbounded_channel();
         let state_map = Arc::new(Mutex::new(IndexMap::new()));
-        let lifecycle = Arc::new(DownloadLifecycle {
-            worker_task: Mutex::new(None),
-        });
+        let worker_task = Arc::new(Mutex::new(None));
 
         let worker = DownloadWorker {
             inner: episode_downloader,
@@ -197,7 +189,7 @@ impl Downloader {
                 state_map,
                 tx,
                 queue_tx,
-                lifecycle,
+                worker_task,
             },
             worker,
         )
@@ -205,7 +197,7 @@ impl Downloader {
 
     /// Wait until the background download worker has observed cancellation and exited.
     pub async fn wait_for_worker(&self) -> Result<(), tokio::task::JoinError> {
-        let worker_task = self.lifecycle.worker_task.lock().unwrap().take();
+        let worker_task = self.worker_task.lock().unwrap().take();
 
         if let Some(worker_task) = worker_task {
             worker_task.await?;
