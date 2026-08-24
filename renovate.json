@@ -1,6 +1,83 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    ":enableVulnerabilityAlerts",
+    ":preserveSemverRanges",
+    "security:minimumReleaseAgeCrate",
+    "security:minimumReleaseAgeNpm"
+  ],
+  "timezone": "Asia/Shanghai",
+  "schedule": [
+    "* 0-7 * * 1"
+  ],
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "semanticCommits": "disabled",
+  "commitMessagePrefix": "deps:",
+  "automerge": false,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "* 0-7 * * 1"
+    ]
+  },
+  "packageRules": [
+    {
+      "description": "Require dashboard approval for major updates",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Group non-major pnpm workspace updates",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "pnpm dependencies"
+    },
+    {
+      "description": "Group non-major Cargo workspace updates",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "Cargo dependencies"
+    },
+    {
+      "description": "Group non-major container updates",
+      "matchManagers": [
+        "dockerfile",
+        "docker-compose"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pinDigest"
+      ],
+      "groupName": "container dependencies"
+    },
+    {
+      "description": "Group non-major GitHub Actions updates",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pinDigest"
+      ],
+      "groupName": "GitHub Actions"
+    }
   ]
 }
