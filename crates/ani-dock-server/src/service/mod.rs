@@ -98,11 +98,8 @@ impl DownloadWorker {
             });
         });
 
-        let Some(download_result) = run_until_shutdown(
-            &self.shutdown,
-            self.inner.download(&episode, notifier),
-        )
-        .await
+        let Some(download_result) =
+            run_until_shutdown(&self.shutdown, self.inner.download(&episode, notifier)).await
         else {
             tracing::info!(sn, "服务正在关闭，取消当前下载并保留队列记录");
             return false;
