@@ -21,6 +21,11 @@ import {
 } from '@/components/ui/progress'
 import { toast } from '@/components/ui/toast'
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
   observeDownloadEventStream,
   type DownloadEventStreamStatus,
 } from '@/lib/download-event-stream'
@@ -45,8 +50,24 @@ export const Route = createFileRoute('/downloading')({
 
 function DownloadStatus({ de }: { de: DownloadEvent }) {
   if ('Err' in de.state) {
+    const message = `下载失败，原因：${de.state.Err}`
+
     return (
-      <span className="text-destructive">下载失败，原因：{de.state.Err}</span>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span
+              className="block cursor-help [overflow-wrap:anywhere] text-destructive"
+              tabIndex={0}
+            />
+          }
+        >
+          {message}
+        </TooltipTrigger>
+        <TooltipContent className="max-w-sm [overflow-wrap:anywhere] whitespace-pre-wrap">
+          {message}
+        </TooltipContent>
+      </Tooltip>
     )
   }
 
