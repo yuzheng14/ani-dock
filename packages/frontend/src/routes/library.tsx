@@ -233,6 +233,8 @@ function DownloadButton({ anime }: { anime: Anime }) {
 }
 
 function RouteComponent() {
+  const [searchQuery, setSearchQuery] = useState('')
+  const deferredSearchQuery = useDeferredValue(searchQuery)
   const { data, isError, isLoading, error } = useQuery({
     queryKey: ['animes'],
     queryFn: async () => {
@@ -245,6 +247,24 @@ function RouteComponent() {
       return resp.json() as Promise<Anime[]>
     },
   })
+  const trimmedSearchQuery = deferredSearchQuery.trim()
+  const normalizedSearchQuery = trimmedSearchQuery.toLowerCase()
+  const filteredAnimes = useMemo(() => {
+    const animes = data ?? []
+
+    if (!normalizedSearchQuery) {
+      return animes
+    }
+
+    return animes.filter(
+      (anime) =>
+        anime.name.toLowerCase().includes(normalizedSearchQuery) ||
+        anime.sn.toString().includes(normalizedSearchQuery)
+    )
+  }, [data, normalizedSearchQuery])
+  const hasSearchQuery = trimmedSearchQuery.length > 0
+  const hasNoSearchResults =
+    Boolean(data?.length) && hasSearchQuery && filteredAnimes.length === 0
 
   if (isLoading) {
     return (
@@ -293,28 +313,6 @@ function RouteComponent() {
     )
   }
 
-  return <AnimeLibrary animes={data} />
-}
-
-function AnimeLibrary({ animes }: { animes: Anime[] }) {
-  const [searchQuery, setSearchQuery] = useState('')
-  const deferredSearchQuery = useDeferredValue(searchQuery)
-  const trimmedSearchQuery = deferredSearchQuery.trim()
-  const normalizedSearchQuery = trimmedSearchQuery.toLowerCase()
-  const filteredAnimes = useMemo(() => {
-    if (!normalizedSearchQuery) {
-      return animes
-    }
-
-    return animes.filter(
-      (anime) =>
-        anime.name.toLowerCase().includes(normalizedSearchQuery) ||
-        anime.sn.toString().includes(normalizedSearchQuery)
-    )
-  }, [animes, normalizedSearchQuery])
-  const hasSearchQuery = trimmedSearchQuery.length > 0
-  const hasNoSearchResults = filteredAnimes.length === 0
-
   return (
     <div className="size-full pr-2 pb-2">
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -345,8 +343,8 @@ function AnimeLibrary({ animes }: { animes: Anime[] }) {
             className="shrink-0 text-sm text-muted-foreground"
           >
             {hasSearchQuery
-              ? `显示 ${filteredAnimes.length} / ${animes.length} 部动画`
-              : `共 ${animes.length} 部动画`}
+              ? `显示 ${filteredAnimes.length} / ${data.length} 部动画`
+              : `共 ${data.length} 部动画`}
           </p>
         </div>
         <div className="self-end md:self-auto">
