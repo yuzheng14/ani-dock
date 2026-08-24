@@ -1,6 +1,58 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    ":enableVulnerabilityAlerts",
+    ":preserveSemverRanges",
+    "security:minimumReleaseAgeCrate",
+    "security:minimumReleaseAgeNpm"
+  ],
+  "timezone": "Asia/Shanghai",
+  "schedule": [
+    "* 0-7 * * *"
+  ],
+  "prConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "semanticCommits": "disabled",
+  "commitMessagePrefix": "deps:",
+  "automerge": false,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "* 0-7 * * 1"
+    ]
+  },
+  "packageRules": [
+    {
+      "description": "Require dashboard approval for major updates",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "dependencyDashboardApproval": true
+    },
+    {
+      "description": "Keep pnpm lock file maintenance separate",
+      "matchManagers": [
+        "npm"
+      ],
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "groupName": "pnpm lock file maintenance",
+      "groupSlug": "pnpm-lock-file-maintenance",
+      "groupSingleUpdates": true
+    },
+    {
+      "description": "Keep Cargo lock file maintenance separate",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchUpdateTypes": [
+        "lockFileMaintenance"
+      ],
+      "groupName": "Cargo lock file maintenance",
+      "groupSlug": "cargo-lock-file-maintenance",
+      "groupSingleUpdates": true
+    }
   ]
 }
