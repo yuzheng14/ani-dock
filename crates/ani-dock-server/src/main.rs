@@ -65,7 +65,7 @@ async fn shutdown_signal() -> io::Result<ShutdownSignal> {
 }
 
 fn flush_logs() {
-    if let Err(error) = io::stderr().lock().flush() {
+    if let Err(error) = io::stdout().lock().flush() {
         eprintln!("刷新日志输出失败：{error}");
     }
 }
