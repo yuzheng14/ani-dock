@@ -6,7 +6,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import {
   AlertCircle,
   AlertTriangle,
+  DownloadIcon,
   Plus,
+  RefreshCw,
   Search,
   SearchX,
   Tv,
@@ -44,10 +46,26 @@ import {
 } from '@/components/ui/item'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import type { DialogRootActions } from '@base-ui/react'
+import { toast } from '@/components/ui/toast'
+import { Spinner } from '@/components/ui/spinner'
 
 export const Route = createFileRoute('/library')({
   component: RouteComponent,
 })
+
+async function importAnime(sn: number) {
+  const resp = await fetch('/api/animes', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ sn }),
+  })
+
+  if (!resp.ok) {
+    throw await resp.json()
+  }
+}
 
 function AddAnimeButton() {
   const [open, setOpen] = useState(false)
@@ -56,20 +74,7 @@ function AddAnimeButton() {
   const queryClient = useQueryClient()
 
   const addAnime = useMutation({
-    mutationFn: async (literalSn: string) => {
-      const sn = Number(literalSn)
-      const resp = await fetch('/api/animes', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ sn }),
-      })
-
-      if (!resp.ok) {
-        throw await resp.json()
-      }
-    },
+    mutationFn: (literalSn: string) => importAnime(Number(literalSn)),
 
     onSuccess: async () => {
       setOpen(false)
@@ -171,7 +176,18 @@ function DownloadButton({ anime }: { anime: Anime }) {
   const dialogRef = useRef<DialogRootActions | null>(null)
   return (
     <Dialog actionsRef={dialogRef}>
-      <DialogTrigger render={<Button />}>下载</DialogTrigger>
+      <DialogTrigger
+        render={
+          <Button
+            size={'icon'}
+            className={'rounded-full'}
+            disabled={mutation.isPending}
+            aria-label={`下载《${anime.name}》`}
+          />
+        }
+      >
+        {mutation.isPending ? <Spinner /> : <DownloadIcon />}
+      </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>选择要下载的剧集</DialogTitle>
@@ -229,6 +245,41 @@ function DownloadButton({ anime }: { anime: Anime }) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function RefreshButton({ anime }: { anime: Anime }) {
+  const queryClient = useQueryClient()
+  const episodeSn = Object.values(anime.series)[0][0].sn
+  const refreshAnime = useMutation({
+    mutationFn: () => importAnime(episodeSn),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['animes'] })
+      toast.add({
+        title: `《${anime.name}》刷新完成`,
+        type: 'success',
+      })
+    },
+    onError: (error) => {
+      toast.add({
+        title: `《${anime.name}》刷新失败`,
+        description: error.message,
+        type: 'error',
+      })
+    },
+  })
+
+  return (
+    <Button
+      variant={'outline'}
+      size={'icon'}
+      className={'rounded-full'}
+      onClick={() => refreshAnime.mutate()}
+      disabled={refreshAnime.isPending}
+      aria-label={`刷新《${anime.name}》`}
+    >
+      {refreshAnime.isPending ? <Spinner /> : <RefreshCw />}
+    </Button>
   )
 }
 
@@ -390,6 +441,7 @@ function RouteComponent() {
                     <ItemDescription>SN: {anime.sn}</ItemDescription>
                   </ItemContent>
                   <ItemActions>
+                    <RefreshButton anime={anime} />
                     <DownloadButton anime={anime} />
                   </ItemActions>
                 </Item>
