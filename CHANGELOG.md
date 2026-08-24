@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.2](https://github.com/yuzheng14/ani-dock/compare/v0.1.1...v0.1.2) (2026-08-24)
+
+
+### Features
+
+* cache cover image responses ([#61](https://github.com/yuzheng14/ani-dock/issues/61)) ([a7e5728](https://github.com/yuzheng14/ani-dock/commit/a7e5728e7e67e37b34a5cb44a66fa298a5631e2e))
+* shut down server gracefully ([#71](https://github.com/yuzheng14/ani-dock/issues/71)) ([cd64c63](https://github.com/yuzheng14/ani-dock/commit/cd64c633b4c2a81274d21b0f44c96e60ddf7d80c))
+
+
+### Bug Fixes
+
+* apply request settings without restarting server ([#69](https://github.com/yuzheng14/ani-dock/issues/69)) ([579db11](https://github.com/yuzheng14/ani-dock/commit/579db110e8b520417a97ff28cb42151435cc602f)), closes [#11](https://github.com/yuzheng14/ani-dock/issues/11)
+* handle download event stream failures ([#70](https://github.com/yuzheng14/ani-dock/issues/70)) ([d956b64](https://github.com/yuzheng14/ani-dock/commit/d956b64f461d4557ef5c65fd272c5c2fcce6075d)), closes [#24](https://github.com/yuzheng14/ani-dock/issues/24)
+* preserve download scheduling order ([#63](https://github.com/yuzheng14/ani-dock/issues/63)) ([33a0283](https://github.com/yuzheng14/ani-dock/commit/33a0283efefb7120f18a35f1213714a85ae8319f)), closes [#12](https://github.com/yuzheng14/ani-dock/issues/12) [#26](https://github.com/yuzheng14/ani-dock/issues/26)
+* restore pending downloads during startup ([#65](https://github.com/yuzheng14/ani-dock/issues/65)) ([003159c](https://github.com/yuzheng14/ani-dock/commit/003159cf39c94e3b640b5626c290537e2711c583)), closes [#32](https://github.com/yuzheng14/ani-dock/issues/32)
+
 ## [0.1.1](https://github.com/yuzheng14/ani-dock/compare/v0.1.0...v0.1.1) (2026-08-23)
 
 
