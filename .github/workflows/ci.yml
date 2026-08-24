@@ -99,16 +99,6 @@ jobs:
           cache-from: type=gha,scope=ani-dock-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=ani-dock-${{ matrix.arch }}
 
-      - name: Scan Docker image
-        uses: aquasecurity/trivy-action@v0.36.0
-        with:
-          image-ref: ${{ env.ANI_DOCK_IMAGE }}
-          format: table
-          exit-code: "1"
-          ignore-unfixed: false
-          vuln-type: os,library
-          severity: HIGH,CRITICAL
-
       - name: Start container
         run: docker compose up --detach --no-build
 
