@@ -38,6 +38,13 @@ jobs:
       - name: Audit frontend dependencies
         run: pnpm audit --audit-level high
 
+      - name: Install cargo-audit
+        if: ${{ !cancelled() }}
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+          fallback: none
+
       - name: Audit Rust dependencies
         if: ${{ !cancelled() }}
         uses: rustsec/audit-check@v2.0.0
