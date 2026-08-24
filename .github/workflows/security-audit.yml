@@ -1,4 +1,4 @@
-name: Security Audit
+name: Dependency Audit
 
 on:
   pull_request:
@@ -15,20 +15,31 @@ permissions:
   issues: write
 
 concurrency:
-  group: security-audit-${{ github.ref }}
+  group: dependency-audit-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  rust:
-    name: Rust dependencies
+  dependencies:
+    name: Dependency audit
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@v2
+        with:
+          version: 11.18.0
+          runtime: node@24
+          install: false
+
+      - name: Audit frontend dependencies
+        run: pnpm audit --audit-level high
+
       - name: Audit Rust dependencies
+        if: ${{ !cancelled() }}
         uses: rustsec/audit-check@v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
