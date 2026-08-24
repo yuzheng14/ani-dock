@@ -39,7 +39,8 @@
         "lockFileMaintenance"
       ],
       "groupName": "pnpm lock file maintenance",
-      "groupSlug": "pnpm-lock-file-maintenance"
+      "groupSlug": "pnpm-lock-file-maintenance",
+      "groupSingleUpdates": true
     },
     {
       "description": "Keep Cargo lock file maintenance separate",
@@ -50,7 +51,8 @@
         "lockFileMaintenance"
       ],
       "groupName": "Cargo lock file maintenance",
-      "groupSlug": "cargo-lock-file-maintenance"
+      "groupSlug": "cargo-lock-file-maintenance",
+      "groupSingleUpdates": true
     }
   ]
 }
