@@ -3,7 +3,14 @@ import { createFileRoute } from '@tanstack/react-router'
 import type { Anime } from '@ani-dock/shared-type'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { AlertCircle, AlertTriangle, Plus, Tv } from 'lucide-react'
+import {
+  AlertCircle,
+  AlertTriangle,
+  Plus,
+  Search,
+  SearchX,
+  Tv,
+} from 'lucide-react'
 import {
   Empty,
   EmptyContent,
@@ -25,7 +32,7 @@ import {
 } from '@/components/ui/dialog'
 import { Field, FieldLabel, FieldGroup } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
-import { useRef, useState } from 'react'
+import { useDeferredValue, useMemo, useRef, useState } from 'react'
 import {
   Item,
   ItemActions,
@@ -37,6 +44,7 @@ import {
 } from '@/components/ui/item'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import type { DialogRootActions } from '@base-ui/react'
+import { filterAnimes } from '@/lib/filter-animes'
 
 export const Route = createFileRoute('/library')({
   component: RouteComponent,
@@ -226,6 +234,8 @@ function DownloadButton({ anime }: { anime: Anime }) {
 }
 
 function RouteComponent() {
+  const [searchQuery, setSearchQuery] = useState('')
+  const deferredSearchQuery = useDeferredValue(searchQuery)
   const { data, isError, isLoading, error } = useQuery({
     queryKey: ['animes'],
     queryFn: async () => {
@@ -238,6 +248,12 @@ function RouteComponent() {
       return resp.json() as Promise<Anime[]>
     },
   })
+  const filteredData = useMemo(
+    () => filterAnimes(data ?? [], deferredSearchQuery),
+    [data, deferredSearchQuery]
+  )
+  const normalizedSearchQuery = deferredSearchQuery.trim()
+  const hasSearchQuery = normalizedSearchQuery.length > 0
 
   if (isLoading) {
     return (
@@ -288,33 +304,89 @@ function RouteComponent() {
 
   return (
     <div className="size-full pr-2 pb-2">
-      <div className="mb-4 flex items-center justify-between">
-        <p className="text-muted-foreground">共 {data.length} 部动画</p>
-        <AddAnimeButton />
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative w-full sm:max-w-xs">
+            <label className="sr-only" htmlFor="anime-library-search">
+              搜索动画
+            </label>
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              id="anime-library-search"
+              type="search"
+              autoComplete="off"
+              placeholder="按名称或 SN 搜索"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              aria-controls="anime-library-results"
+              aria-describedby="anime-library-result-count"
+              className="pl-8"
+            />
+          </div>
+          <p
+            id="anime-library-result-count"
+            aria-live="polite"
+            className="shrink-0 text-sm text-muted-foreground"
+          >
+            {hasSearchQuery
+              ? `显示 ${filteredData.length} / ${data.length} 部动画`
+              : `共 ${data.length} 部动画`}
+          </p>
+        </div>
+        <div className="self-end md:self-auto">
+          <AddAnimeButton />
+        </div>
       </div>
-      <ItemGroup className="flex flex-row flex-wrap gap-4">
-        {data.map((anime) => {
-          return (
-            <Item key={anime.id} className="w-3xs" variant={'outline'}>
-              <ItemHeader>
-                <img
-                  src={`/api/animes/${anime.id}/cover`}
-                  alt={`${anime.sn}封面`}
-                  loading="lazy"
-                  className="w-full rounded-md object-cover transition-transform duration-300"
-                />
-              </ItemHeader>
-              <ItemContent>
-                <ItemTitle>{anime.name}</ItemTitle>
-                <ItemDescription>暂无简介</ItemDescription>
-              </ItemContent>
-              <ItemActions>
-                <DownloadButton anime={anime} />
-              </ItemActions>
-            </Item>
-          )
-        })}
-      </ItemGroup>
+      <div
+        id="anime-library-results"
+        aria-busy={searchQuery !== deferredSearchQuery}
+      >
+        {filteredData.length ? (
+          <ItemGroup className="flex flex-row flex-wrap gap-4">
+            {filteredData.map((anime) => {
+              return (
+                <Item key={anime.id} className="w-3xs" variant={'outline'}>
+                  <ItemHeader>
+                    <img
+                      src={`/api/animes/${anime.id}/cover`}
+                      alt={`${anime.sn}封面`}
+                      loading="lazy"
+                      className="w-full rounded-md object-cover transition-transform duration-300"
+                    />
+                  </ItemHeader>
+                  <ItemContent>
+                    <ItemTitle>{anime.name}</ItemTitle>
+                    <ItemDescription>SN: {anime.sn}</ItemDescription>
+                  </ItemContent>
+                  <ItemActions>
+                    <DownloadButton anime={anime} />
+                  </ItemActions>
+                </Item>
+              )
+            })}
+          </ItemGroup>
+        ) : (
+          <Empty className="min-h-64 border">
+            <EmptyHeader role="status">
+              <EmptyMedia variant={'icon'}>
+                <SearchX />
+              </EmptyMedia>
+              <EmptyTitle>未找到匹配的动画</EmptyTitle>
+              <EmptyDescription>
+                没有名称或 SN 与“{normalizedSearchQuery}”匹配的动画
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent>
+              <Button variant={'outline'} onClick={() => setSearchQuery('')}>
+                清除搜索
+              </Button>
+            </EmptyContent>
+          </Empty>
+        )}
+      </div>
     </div>
   )
 }
