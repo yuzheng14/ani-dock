@@ -1,4 +1,5 @@
 use std::{
+    future::Future,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -32,6 +33,17 @@ pub struct Services {
 pub type DownloadState = Result<EpisodeDownloadEvent, Arc<EpisodeDownloadError>>;
 
 pub type StateMap = IndexMap<u32, DownloadState>;
+
+async fn run_until_shutdown<T>(
+    shutdown: &CancellationToken,
+    operation: impl Future<Output = T>,
+) -> Option<T> {
+    tokio::select! {
+        biased;
+        () = shutdown.cancelled() => None,
+        result = operation => Some(result),
+    }
+}
 
 struct DownloadWorker {
     inner: EpisodeDownloader,
@@ -86,7 +98,16 @@ impl DownloadWorker {
             });
         });
 
-        let download_result = self.inner.download(&episode, notifier).await;
+        let Some(download_result) = run_until_shutdown(
+            &self.shutdown,
+            self.inner.download(&episode, notifier),
+        )
+        .await
+        else {
+            tracing::info!(sn, "服务正在关闭，取消当前下载并保留队列记录");
+            return false;
+        };
+
         if let Err(err) = download_result {
             let error = Arc::new(err);
             self.state_map
@@ -104,10 +125,9 @@ impl DownloadWorker {
             }
         }
 
-        // Never cancel an in-flight download: finishing its finalization and database update
-        // avoids leaving a partially copied output file. Shutdown does, however, skip the
-        // cooldown and prevents the next queued download from starting. Unstarted/failed rows
-        // remain `downloaded = 0` and are restored from the persistent queue on the next start.
+        // Shutdown skips the remaining cooldown and prevents the next queued download from
+        // starting. Unstarted, cancelled, and failed rows remain `downloaded = 0` and are
+        // restored from the persistent queue on the next start.
         if self.queue_rx.is_closed() {
             return false;
         }
@@ -186,7 +206,7 @@ impl Downloader {
         )
     }
 
-    /// Wait until the background download worker has finished its orderly shutdown.
+    /// Wait until the background download worker has observed cancellation and exited.
     pub async fn wait_for_worker(&self) -> Result<(), tokio::task::JoinError> {
         let worker_task = self.lifecycle.worker_task.lock().unwrap().take();
 
@@ -350,7 +370,7 @@ mod tests {
         repository::AnimeRepository,
     };
     use sqlx::SqlitePool;
-    use tokio::sync::Barrier;
+    use tokio::sync::{Barrier, oneshot};
 
     use super::*;
 
@@ -392,6 +412,32 @@ mod tests {
             worker.queue_rx.try_recv(),
             Err(mpsc::error::TryRecvError::Empty)
         ));
+    }
+
+    #[tokio::test]
+    async fn shutdown_cancels_an_in_flight_operation() {
+        let shutdown = CancellationToken::new();
+        let shutdown_for_task = shutdown.clone();
+        let (started_tx, started_rx) = oneshot::channel();
+
+        let task = tokio::spawn(async move {
+            run_until_shutdown(&shutdown_for_task, async move {
+                let _ = started_tx.send(());
+                std::future::pending::<()>().await;
+            })
+            .await
+        });
+
+        started_rx
+            .await
+            .expect("operation should start before cancellation");
+        shutdown.cancel();
+
+        let result = time::timeout(Duration::from_secs(1), task)
+            .await
+            .expect("cancellation should stop the operation promptly")
+            .expect("operation task should not panic");
+        assert!(result.is_none());
     }
 
     #[sqlx::test(migrations = "../ani-dock-db/migrations")]
