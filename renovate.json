@@ -9,7 +9,7 @@
   ],
   "timezone": "Asia/Shanghai",
   "schedule": [
-    "* 0-7 * * 1"
+    "* 0-7 * * *"
   ],
   "prConcurrentLimit": 5,
   "prHourlyLimit": 2,
@@ -31,53 +31,26 @@
       "dependencyDashboardApproval": true
     },
     {
-      "description": "Group non-major pnpm workspace updates",
+      "description": "Keep pnpm lock file maintenance separate",
       "matchManagers": [
         "npm"
       ],
       "matchUpdateTypes": [
-        "minor",
-        "patch"
+        "lockFileMaintenance"
       ],
-      "groupName": "pnpm dependencies"
+      "groupName": "pnpm lock file maintenance",
+      "groupSlug": "pnpm-lock-file-maintenance"
     },
     {
-      "description": "Group non-major Cargo workspace updates",
+      "description": "Keep Cargo lock file maintenance separate",
       "matchManagers": [
         "cargo"
       ],
       "matchUpdateTypes": [
-        "minor",
-        "patch"
+        "lockFileMaintenance"
       ],
-      "groupName": "Cargo dependencies"
-    },
-    {
-      "description": "Group non-major container updates",
-      "matchManagers": [
-        "dockerfile",
-        "docker-compose"
-      ],
-      "matchUpdateTypes": [
-        "minor",
-        "patch",
-        "digest",
-        "pinDigest"
-      ],
-      "groupName": "container dependencies"
-    },
-    {
-      "description": "Group non-major GitHub Actions updates",
-      "matchManagers": [
-        "github-actions"
-      ],
-      "matchUpdateTypes": [
-        "minor",
-        "patch",
-        "digest",
-        "pinDigest"
-      ],
-      "groupName": "GitHub Actions"
+      "groupName": "Cargo lock file maintenance",
+      "groupSlug": "cargo-lock-file-maintenance"
     }
   ]
 }
