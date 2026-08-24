@@ -153,11 +153,7 @@ impl Downloader {
     ) -> Self {
         let (downloader, worker) = Self::build(episode_downloader, repo, shutdown);
         let worker_task = tokio::spawn(worker.run());
-        downloader
-            .worker_task
-            .lock()
-            .unwrap()
-            .replace(worker_task);
+        downloader.worker_task.lock().unwrap().replace(worker_task);
 
         downloader
     }
