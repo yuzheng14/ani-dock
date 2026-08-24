@@ -1,4 +1,5 @@
 use std::{
+    future::Future,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -16,8 +17,10 @@ use anyhow::Context;
 use indexmap::{IndexMap, map::Entry};
 use tokio::{
     sync::{broadcast, mpsc},
+    task::JoinHandle,
     time,
 };
+use tokio_util::sync::CancellationToken;
 use wreq::header::REFERER;
 
 use crate::CoreEpisode;
@@ -31,9 +34,21 @@ pub type DownloadState = Result<EpisodeDownloadEvent, Arc<EpisodeDownloadError>>
 
 pub type StateMap = IndexMap<u32, DownloadState>;
 
+async fn run_until_shutdown<T>(
+    shutdown: &CancellationToken,
+    operation: impl Future<Output = T>,
+) -> Option<T> {
+    tokio::select! {
+        biased;
+        () = shutdown.cancelled() => None,
+        result = operation => Some(result),
+    }
+}
+
 struct DownloadWorker {
     inner: EpisodeDownloader,
     queue_rx: mpsc::UnboundedReceiver<CoreEpisode>,
+    shutdown: CancellationToken,
     state_map: Arc<Mutex<StateMap>>,
     queue_repo: DownloadQueueRepository,
     tx: broadcast::Sender<DownloadStatus>,
@@ -41,17 +56,32 @@ struct DownloadWorker {
 
 impl DownloadWorker {
     async fn run(mut self) {
-        while let Some(episode) = self.queue_rx.recv().await {
-            self.download_one(episode).await
+        loop {
+            // Once shutdown has been requested, queued downloads must stay pending instead
+            // of racing the shutdown notification and starting new work.
+            let Some(Some(episode)) =
+                run_until_shutdown(&self.shutdown, self.queue_rx.recv()).await
+            else {
+                break;
+            };
+
+            if !self.download_one(episode).await {
+                break;
+            }
         }
+
+        tracing::info!("下载任务已停止");
     }
 
     /// actual download
-    async fn download_one(&self, episode: CoreEpisode) {
+    ///
+    /// Returns whether the worker should receive another queued download.
+    async fn download_one(&self, episode: CoreEpisode) -> bool {
         let sn = episode.sn();
         // Model human viewing behavior by starting downloads at least 24 minutes apart.
         // If a download takes longer, the next task may start immediately after it finishes.
         let cooldown = time::sleep(Duration::from_secs(24 * 60));
+        tokio::pin!(cooldown);
 
         let status_map = self.state_map.clone();
         let tx = self.tx.clone();
@@ -63,7 +93,13 @@ impl DownloadWorker {
             });
         });
 
-        let download_result = self.inner.download(&episode, notifier).await;
+        let Some(download_result) =
+            run_until_shutdown(&self.shutdown, self.inner.download(&episode, notifier)).await
+        else {
+            tracing::info!(sn, "服务正在关闭，取消当前下载并保留队列记录");
+            return false;
+        };
+
         if let Err(err) = download_result {
             let error = Arc::new(err);
             self.state_map
@@ -81,7 +117,16 @@ impl DownloadWorker {
             }
         }
 
-        cooldown.await;
+        // Shutdown skips the remaining cooldown and prevents the next queued download from
+        // starting. Unstarted, cancelled, and failed rows remain `downloaded = 0` and are
+        // restored from the persistent queue on the next start.
+        if self.queue_rx.is_closed() {
+            return false;
+        }
+
+        run_until_shutdown(&self.shutdown, &mut cooldown)
+            .await
+            .is_some()
     }
 }
 
@@ -90,12 +135,18 @@ pub struct Downloader {
     state_map: Arc<Mutex<StateMap>>,
     queue_tx: mpsc::UnboundedSender<CoreEpisode>,
     tx: broadcast::Sender<DownloadStatus>,
+    worker_task: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 impl Downloader {
-    pub fn new(episode_downloader: EpisodeDownloader, repo: DownloadQueueRepository) -> Self {
-        let (downloader, worker) = Self::build(episode_downloader, repo);
-        tokio::spawn(worker.run());
+    pub fn new(
+        episode_downloader: EpisodeDownloader,
+        repo: DownloadQueueRepository,
+        shutdown: CancellationToken,
+    ) -> Self {
+        let (downloader, worker) = Self::build(episode_downloader, repo, shutdown);
+        let worker_task = tokio::spawn(worker.run());
+        downloader.worker_task.lock().unwrap().replace(worker_task);
 
         downloader
     }
@@ -106,15 +157,18 @@ impl Downloader {
     fn build(
         episode_downloader: EpisodeDownloader,
         repo: DownloadQueueRepository,
+        shutdown: CancellationToken,
     ) -> (Self, DownloadWorker) {
         let (tx, _) = broadcast::channel(128);
         let (queue_tx, queue_rx) = mpsc::unbounded_channel();
         let state_map = Arc::new(Mutex::new(IndexMap::new()));
+        let worker_task = Arc::new(Mutex::new(None));
 
         let worker = DownloadWorker {
             inner: episode_downloader,
             state_map: state_map.clone(),
             queue_rx,
+            shutdown,
             queue_repo: repo,
             tx: tx.clone(),
         };
@@ -124,14 +178,31 @@ impl Downloader {
                 state_map,
                 tx,
                 queue_tx,
+                worker_task,
             },
             worker,
         )
     }
 
-    /// This only means download task has been scheduled, not completed
+    /// Wait until the background download worker has observed cancellation and exited.
+    pub async fn wait_for_worker(&self) -> Result<(), tokio::task::JoinError> {
+        let worker_task = self.worker_task.lock().unwrap().take();
+
+        if let Some(worker_task) = worker_task {
+            worker_task.await?;
+        }
+
+        Ok(())
+    }
+
+    /// Schedule an already-persisted download for the in-memory worker.
+    ///
+    /// Callers must insert the episode into `download_queue` before calling this method. That
+    /// ordering ensures a task accepted concurrently with shutdown can be restored next time,
+    /// even if the worker has already observed cancellation and does not receive it.
     pub fn schedule_download(&self, episode: CoreEpisode) {
         let sn = episode.sn();
+
         let mut state_map = self.state_map.lock().unwrap();
 
         // A non-error state means the episode is already queued or completed.
@@ -277,19 +348,32 @@ mod tests {
         repository::AnimeRepository,
     };
     use sqlx::SqlitePool;
-    use tokio::sync::Barrier;
+    use tokio::sync::{Barrier, oneshot};
 
     use super::*;
 
     async fn test_downloader_parts() -> (Downloader, DownloadWorker) {
+        test_downloader_parts_with_shutdown(CancellationToken::new()).await
+    }
+
+    async fn test_downloader_parts_with_shutdown(
+        shutdown: CancellationToken,
+    ) -> (Downloader, DownloadWorker) {
         let pool = SqlitePool::connect("sqlite::memory:")
             .await
             .expect("in-memory sqlite should connect");
 
-        test_downloader_parts_with_pool(pool)
+        test_downloader_parts_with_pool_and_shutdown(pool, shutdown)
     }
 
     fn test_downloader_parts_with_pool(pool: SqlitePool) -> (Downloader, DownloadWorker) {
+        test_downloader_parts_with_pool_and_shutdown(pool, CancellationToken::new())
+    }
+
+    fn test_downloader_parts_with_pool_and_shutdown(
+        pool: SqlitePool,
+        shutdown: CancellationToken,
+    ) -> (Downloader, DownloadWorker) {
         let config = Config {
             proxy: Some("http://127.0.0.1:1".to_string()),
             ..Config::default()
@@ -298,7 +382,7 @@ mod tests {
         let config = Arc::new(Mutex::new(config));
         let inner = EpisodeDownloader::new(request_client, config, DeviceId::default());
 
-        Downloader::build(inner, DownloadQueueRepository::new(pool))
+        Downloader::build(inner, DownloadQueueRepository::new(pool), shutdown)
     }
 
     fn assert_queue_empty(worker: &mut DownloadWorker) {
@@ -306,6 +390,32 @@ mod tests {
             worker.queue_rx.try_recv(),
             Err(mpsc::error::TryRecvError::Empty)
         ));
+    }
+
+    #[tokio::test]
+    async fn shutdown_cancels_an_in_flight_operation() {
+        let shutdown = CancellationToken::new();
+        let shutdown_for_task = shutdown.clone();
+        let (started_tx, started_rx) = oneshot::channel();
+
+        let task = tokio::spawn(async move {
+            run_until_shutdown(&shutdown_for_task, async move {
+                let _ = started_tx.send(());
+                std::future::pending::<()>().await;
+            })
+            .await
+        });
+
+        started_rx
+            .await
+            .expect("operation should start before cancellation");
+        shutdown.cancel();
+
+        let result = time::timeout(Duration::from_secs(1), task)
+            .await
+            .expect("cancellation should stop the operation promptly")
+            .expect("operation task should not panic");
+        assert!(result.is_none());
     }
 
     #[sqlx::test(migrations = "../ani-dock-db/migrations")]
@@ -565,6 +675,25 @@ mod tests {
             .await
             .expect("worker should stop after all queue senders are dropped")
             .expect("worker task should not panic");
+    }
+
+    #[tokio::test]
+    async fn shutdown_stops_worker_without_starting_a_late_download() {
+        const SN: u32 = 78_901;
+
+        let shutdown = CancellationToken::new();
+        let (downloader, worker) = test_downloader_parts_with_shutdown(shutdown.clone()).await;
+        shutdown.cancel();
+        downloader.schedule_download(CoreEpisode::new(SN, 1, ""));
+
+        time::timeout(Duration::from_secs(1), worker.run())
+            .await
+            .expect("worker should stop promptly when shutdown is requested");
+
+        assert!(matches!(
+            downloader.state_map.lock().unwrap().get(&SN),
+            Some(Ok(EpisodeDownloadEvent::Pending))
+        ));
     }
 
     #[tokio::test]
