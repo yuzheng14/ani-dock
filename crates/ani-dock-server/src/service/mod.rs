@@ -57,17 +57,12 @@ struct DownloadWorker {
 impl DownloadWorker {
     async fn run(mut self) {
         loop {
-            let episode = tokio::select! {
-                // Once shutdown has been requested, queued downloads must stay pending instead
-                // of racing the shutdown notification and starting new work.
-                biased;
-                () = self.shutdown.cancelled() => break,
-                episode = self.queue_rx.recv() => {
-                    let Some(episode) = episode else {
-                        break;
-                    };
-                    episode
-                }
+            // Once shutdown has been requested, queued downloads must stay pending instead
+            // of racing the shutdown notification and starting new work.
+            let Some(Some(episode)) =
+                run_until_shutdown(&self.shutdown, self.queue_rx.recv()).await
+            else {
+                break;
             };
 
             if !self.download_one(episode).await {
@@ -129,11 +124,9 @@ impl DownloadWorker {
             return false;
         }
 
-        tokio::select! {
-            biased;
-            () = self.shutdown.cancelled() => false,
-            () = &mut cooldown => true,
-        }
+        run_until_shutdown(&self.shutdown, &mut cooldown)
+            .await
+            .is_some()
     }
 }
 
