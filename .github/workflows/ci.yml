@@ -123,3 +123,20 @@ jobs:
       - name: Stop container
         if: always()
         run: docker compose down --volumes
+
+  docker-required:
+    name: Docker
+    needs: docker
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Verify Docker matrix
+        env:
+          DOCKER_RESULT: ${{ needs.docker.result }}
+        run: |
+          if [ "${DOCKER_RESULT}" != "success" ]; then
+            echo "::error::Docker matrix concluded with ${DOCKER_RESULT}"
+            exit 1
+          fi
