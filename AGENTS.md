@@ -11,3 +11,10 @@
 ## HTTP JSON responses
 
 - Whenever parsing an HTTP response body as JSON, use the project's `JsonResponseExt::json_or_log` wrapper instead of the HTTP client's native `.json()` method.
+
+## Production code changes
+
+- Do not modify production code unless the user has explicitly approved direct production-code edits.
+- Default to an "explain, then the user edits" workflow: describe the issue and the exact recommended change, then let the user apply it.
+- Requests to review, diagnose, or add tests do not authorize production-code fixes or refactors.
+- If a test would require a production-code seam or refactor, stop and obtain the user's explicit approval before making that change.
