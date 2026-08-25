@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use serde::de::DeserializeOwned;
 use thiserror::Error;
-use tokio::sync::watch;
+use tokio::{sync::watch, time::sleep};
 use wreq::{
     Client, IntoUrl, Proxy, RequestBuilder, Url,
     cookie::Jar,
@@ -197,6 +197,37 @@ impl JsonResponseExt for wreq::Response {
             wreq::Error::from(error)
         })
     }
+}
+
+pub trait SendWithRetryExt {
+    async fn send_with_retry(self) -> wreq::Result<wreq::Response>;
+}
+
+impl SendWithRetryExt for wreq::RequestBuilder {
+    async fn send_with_retry(self) -> wreq::Result<wreq::Response> {
+        let mut times = 0;
+        loop {
+            times += 1;
+            let Some(req) = self.try_clone() else {
+                tracing::warn!("无法复制请求，将降级至无重试");
+                return self.send().await;
+            };
+            match req.send().await {
+                Ok(resp) => return Ok(resp),
+                Err(resp) => {
+                    tracing::warn!("请求失败，当前已请求 {times} 次");
+                    if times >= 3 {
+                        return Err(resp);
+                    }
+                    sleep(Duration::from_secs(1)).await;
+                }
+            }
+        }
+    }
+}
+
+pub fn is_transient_transport_error(error: &wreq::Error) -> bool {
+    error.is_timeout() || error.is_connect() || error.is_connection_reset() || error.is_body()
 }
 
 #[cfg(test)]

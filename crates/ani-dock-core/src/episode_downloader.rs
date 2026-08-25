@@ -1,5 +1,6 @@
 use std::{
     ops::Deref,
+    path::Path,
     sync::{Arc, Mutex, atomic::AtomicUsize},
     time::Duration,
 };
@@ -19,7 +20,7 @@ use tokio::{
 };
 use ts_rs::TS;
 use url::Url;
-use wreq::header::REFERER;
+use wreq::{RequestBuilder, header::REFERER};
 
 use crate::{
     Episode,
@@ -29,8 +30,9 @@ use crate::{
     ffmpeg::{FFmpeg, FFmpegError},
     model::episode_detail::{EpisodeDetail, EpisodeDetailBuildError},
     request::{
-        self, JsonResponseExt, RequestClient,
+        self, JsonResponseExt, RequestClient, SendWithRetryExt,
         common::{ApiError, CommonResponseBody, DirectDataResponseBody},
+        is_transient_transport_error,
         token::{Token, TokenError},
         video_src::VideoSrc,
     },
@@ -159,6 +161,57 @@ impl From<nom::error::Error<&[u8]>> for EpisodeDownloadError {
 
 pub type EpisodeDownloadResult<T = ()> = Result<T, EpisodeDownloadError>;
 
+const SEGMENT_DOWNLOAD_MAX_ATTEMPTS: u32 = 3;
+const SEGMENT_DOWNLOAD_RETRY_DELAY: Duration = Duration::from_secs(1);
+
+fn is_retryable_segment_download_error(error: &wreq::Error) -> bool {
+    is_transient_transport_error(error)
+        // A connection closed before response headers is reported as a request error.
+        || error.is_request()
+        // An EOF before Content-Length is reached while reading the response body is
+        // reported as a decode error. JSON decoding is not performed in this helper.
+        || error.is_decode()
+}
+
+async fn download_to_file_with_retry<F>(
+    make_request: F,
+    path: &Path,
+    max_attempts: u32,
+    retry_delay: Duration,
+) -> EpisodeDownloadResult
+where
+    F: Fn() -> RequestBuilder,
+{
+    assert!(max_attempts > 0, "max_attempts must be greater than zero");
+
+    for attempt in 1..=max_attempts {
+        let result: EpisodeDownloadResult = async {
+            let mut response = make_request().send().await?.error_for_status()?;
+            let mut file = fs::File::create(path).await?;
+
+            while let Some(chunk) = response.chunk().await? {
+                file.write_all(&chunk).await?;
+            }
+
+            file.flush().await?;
+            Ok(())
+        }
+        .await;
+
+        match result {
+            Ok(()) => return Ok(()),
+            Err(EpisodeDownloadError::Http(error))
+                if attempt < max_attempts && is_retryable_segment_download_error(&error) =>
+            {
+                time::sleep(retry_delay).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+
+    unreachable!("the final attempt always returns from the loop")
+}
+
 fn check_vip_requirement(token: &Token, only_use_vip: bool) -> EpisodeDownloadResult {
     if !only_use_vip {
         return Ok(());
@@ -281,7 +334,7 @@ impl InnerDownloader {
             .request_client
             .get(&src, false)
             .header(REFERER, get_referer(self.sn))
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?
             .bytes()
@@ -342,7 +395,7 @@ impl InnerDownloader {
                         .request_client
                         .get(media_pl_src.join(&uri)?, false)
                         .header(REFERER, get_referer(self.sn))
-                        .send()
+                        .send_with_retry()
                         .await?
                         .error_for_status()?;
                     let mut file = fs::File::create(tmp_dir_path.join(&uri)).await?;
@@ -372,26 +425,26 @@ impl InnerDownloader {
                 total,
             });
         stream::iter(media_pl.segments)
-            .map(|segment| async {
-                // make compiler happy
-                let uri = segment.uri;
-                let mut resp = self
-                    .request_client
-                    .get(media_pl_src.join(uri.deref())?, false)
-                    .header(REFERER, get_referer(self.sn))
-                    .send()
-                    .await?
-                    .error_for_status()?;
+            .map(|segment| {
+                let media_pl_src = media_pl_src.clone();
+                let tmp_dir_path = tmp_dir_path.clone();
+                async move {
+                    let uri = segment.uri;
+                    let url = media_pl_src.join(uri.deref())?;
+                    let path = tmp_dir_path.join(uri.deref());
 
-                let mut file = fs::File::create(tmp_dir_path.join(uri.deref())).await?;
-
-                while let Some(chunk) = resp.chunk().await? {
-                    file.write_all(&chunk).await?
+                    download_to_file_with_retry(
+                        || {
+                            self.request_client
+                                .get(url.clone(), false)
+                                .header(REFERER, get_referer(self.sn))
+                        },
+                        &path,
+                        SEGMENT_DOWNLOAD_MAX_ATTEMPTS,
+                        SEGMENT_DOWNLOAD_RETRY_DELAY,
+                    )
+                    .await
                 }
-
-                file.flush().await?;
-
-                Ok::<(), EpisodeDownloadError>(())
             })
             .buffer_unordered(multi_downloading_segment)
             .inspect_ok(|_| {
@@ -445,7 +498,7 @@ impl InnerDownloader {
             .request_client
             .get(&url, true)
             .header(REFERER, get_referer(self.sn))
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?
             .json_or_log()
@@ -481,7 +534,7 @@ impl InnerDownloader {
             .request_client
             .get(url, true)
             .header(REFERER, get_referer(self.sn))
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?
             .json_or_log::<DirectDataResponseBody<Token, TokenError>>()
@@ -498,7 +551,7 @@ impl InnerDownloader {
         self.request_client
             .get(&url, true)
             .header(REFERER, get_referer(self.sn))
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?;
 
@@ -519,7 +572,7 @@ impl InnerDownloader {
         self.request_client
             .get(&url, true)
             .header(REFERER, get_referer(self.sn))
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?;
 
@@ -532,7 +585,7 @@ impl InnerDownloader {
         self.request_client
             .get(&url, true)
             .header(REFERER, get_referer(self.sn))
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?;
 
@@ -548,7 +601,7 @@ impl InnerDownloader {
         self.request_client
             .get(&url, true)
             .header(REFERER, get_referer(self.sn))
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?;
 
@@ -561,7 +614,7 @@ impl InnerDownloader {
         self.request_client
             .get(&url, true)
             .header(REFERER, get_referer(self.sn))
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?;
 
@@ -604,7 +657,7 @@ impl InnerDownloader {
             .request_client
             .get(url, true)
             .header(REFERER, get_referer(self.sn))
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?
             .json_or_log::<CommonResponseBody<VideoSrc, ApiError>>()
@@ -680,7 +733,7 @@ impl InnerDownloader {
             .request_client
             .get(pl_src, true)
             .header(REFERER, get_referer(self.sn))
-            .send()
+            .send_with_retry()
             .await?
             .error_for_status()?
             .bytes()
@@ -712,6 +765,210 @@ pub enum EpisodeDownloadEvent {
     Finalizing,
     /// 完成
     Completed,
+}
+
+#[cfg(test)]
+mod segment_retry_test {
+    use std::{
+        path::PathBuf,
+        sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        },
+        time::Duration,
+    };
+
+    use anyhow::Result;
+    use tokio::{
+        fs,
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+        task::JoinHandle,
+    };
+    use wreq::StatusCode;
+
+    use super::{EpisodeDownloadError, download_to_file_with_retry};
+
+    static NEXT_TEST_DIRECTORY: AtomicUsize = AtomicUsize::new(0);
+
+    struct TestServer {
+        url: String,
+        request_count: Arc<AtomicUsize>,
+        task: JoinHandle<()>,
+    }
+
+    impl TestServer {
+        async fn start(responses: Vec<Vec<u8>>) -> Self {
+            assert!(!responses.is_empty(), "test server needs a response");
+
+            let listener = TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("test server should bind");
+            let address = listener
+                .local_addr()
+                .expect("test server should have a local address");
+            let request_count = Arc::new(AtomicUsize::new(0));
+            let task_request_count = request_count.clone();
+            let task = tokio::spawn(async move {
+                loop {
+                    let Ok((mut stream, _)) = listener.accept().await else {
+                        return;
+                    };
+
+                    let mut request = Vec::new();
+                    let mut buffer = [0_u8; 1024];
+                    loop {
+                        let Ok(read) = stream.read(&mut buffer).await else {
+                            break;
+                        };
+                        if read == 0 {
+                            break;
+                        }
+                        request.extend_from_slice(&buffer[..read]);
+                        if request.windows(4).any(|bytes| bytes == b"\r\n\r\n") {
+                            break;
+                        }
+                    }
+
+                    let request_index = task_request_count.fetch_add(1, Ordering::SeqCst);
+                    let response = &responses[request_index.min(responses.len() - 1)];
+                    let _ = stream.write_all(response).await;
+                    let _ = stream.shutdown().await;
+                }
+            });
+
+            Self {
+                url: format!("http://{address}/segment.ts"),
+                request_count,
+                task,
+            }
+        }
+
+        fn request_count(&self) -> usize {
+            self.request_count.load(Ordering::SeqCst)
+        }
+    }
+
+    impl Drop for TestServer {
+        fn drop(&mut self) {
+            self.task.abort();
+        }
+    }
+
+    fn response(status: &str, content_length: usize, body: &[u8]) -> Vec<u8> {
+        let mut response = format!(
+            "HTTP/1.1 {status}\r\nContent-Length: {content_length}\r\nConnection: close\r\n\r\n"
+        )
+        .into_bytes();
+        response.extend_from_slice(body);
+        response
+    }
+
+    async fn test_segment_path(test_name: &str) -> Result<(PathBuf, PathBuf)> {
+        let id = NEXT_TEST_DIRECTORY.fetch_add(1, Ordering::Relaxed);
+        let directory =
+            std::env::temp_dir().join(format!("ani-dock-{test_name}-{}-{id}", std::process::id()));
+        fs::create_dir(&directory).await?;
+        let path = directory.join("segment.ts");
+        Ok((directory, path))
+    }
+
+    fn test_client() -> wreq::Client {
+        wreq::Client::builder()
+            .no_proxy()
+            .timeout(Duration::from_secs(2))
+            .build()
+            .expect("test client should build")
+    }
+
+    #[tokio::test]
+    async fn retries_interrupted_body_and_truncates_partial_file() -> Result<()> {
+        let complete_body = b"complete segment body";
+        let partial_body = b"partial";
+        let server = TestServer::start(vec![
+            response("200 OK", complete_body.len(), partial_body),
+            response("200 OK", complete_body.len(), complete_body),
+        ])
+        .await;
+        let client = test_client();
+        let (directory, path) = test_segment_path("retry-success").await?;
+
+        download_to_file_with_retry(|| client.get(server.url.clone()), &path, 3, Duration::ZERO)
+            .await?;
+
+        assert_eq!(server.request_count(), 2);
+        assert_eq!(fs::read(&path).await?, complete_body);
+        fs::remove_dir_all(directory).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn retries_connection_closed_before_response_headers() -> Result<()> {
+        let complete_body = b"complete segment body";
+        let server = TestServer::start(vec![
+            Vec::new(),
+            response("200 OK", complete_body.len(), complete_body),
+        ])
+        .await;
+        let client = test_client();
+        let (directory, path) = test_segment_path("retry-before-headers").await?;
+
+        download_to_file_with_retry(|| client.get(server.url.clone()), &path, 3, Duration::ZERO)
+            .await?;
+
+        assert_eq!(server.request_count(), 2);
+        assert_eq!(fs::read(&path).await?, complete_body);
+        fs::remove_dir_all(directory).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn returns_error_after_interrupted_body_retries_are_exhausted() -> Result<()> {
+        let partial_body = b"partial";
+        let server = TestServer::start(vec![response("200 OK", 100, partial_body)]).await;
+        let client = test_client();
+        let (directory, path) = test_segment_path("retry-exhausted").await?;
+
+        let result = download_to_file_with_retry(
+            || client.get(server.url.clone()),
+            &path,
+            3,
+            Duration::ZERO,
+        )
+        .await;
+
+        assert!(matches!(result, Err(EpisodeDownloadError::Http(_))));
+        assert_eq!(server.request_count(), 3);
+        assert_eq!(fs::read(&path).await?, partial_body);
+        fs::remove_dir_all(directory).await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn does_not_retry_http_error_status() -> Result<()> {
+        let server = TestServer::start(vec![response("503 Service Unavailable", 0, b"")]).await;
+        let client = test_client();
+        let (directory, path) = test_segment_path("status-error").await?;
+
+        let result = download_to_file_with_retry(
+            || client.get(server.url.clone()),
+            &path,
+            3,
+            Duration::ZERO,
+        )
+        .await;
+
+        match result {
+            Err(EpisodeDownloadError::Http(error)) => {
+                assert_eq!(error.status(), Some(StatusCode::SERVICE_UNAVAILABLE));
+            }
+            result => panic!("expected HTTP status error, got {result:?}"),
+        }
+        assert_eq!(server.request_count(), 1);
+        assert!(!path.exists());
+        fs::remove_dir_all(directory).await?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
