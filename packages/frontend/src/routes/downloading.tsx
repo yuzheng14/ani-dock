@@ -57,7 +57,7 @@ function DownloadStatus({ de }: { de: DownloadEvent }) {
         <TooltipTrigger
           render={
             <span
-              className="cursor-help wrap-anywhere text-destructive"
+              className="line-clamp-2 cursor-help wrap-anywhere text-destructive"
               tabIndex={0}
             />
           }
@@ -174,7 +174,9 @@ function RouteComponent() {
                 <ItemTitle className="line-clamp-1">
                   第 {de.episode.episode} 集 - {de.episode.sn}
                 </ItemTitle>
-                <ItemDescription>
+                <ItemDescription
+                  className={'Err' in de.state ? 'line-clamp-none' : undefined}
+                >
                   <DownloadStatus de={de} />
                 </ItemDescription>
               </ItemContent>
