@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.3](https://github.com/yuzheng14/ani-dock/compare/v0.1.2...v0.1.3) (2026-08-25)
+
+
+### Features
+
+* add anime library search ([#86](https://github.com/yuzheng14/ani-dock/issues/86)) ([cd43adb](https://github.com/yuzheng14/ani-dock/commit/cd43adb1a177d7f352e04ab38c53e5c38a26aebb)), closes [#9](https://github.com/yuzheng14/ani-dock/issues/9)
+* **core:** retry transient media download failures ([#92](https://github.com/yuzheng14/ani-dock/issues/92)) ([32fb807](https://github.com/yuzheng14/ani-dock/commit/32fb807a7394a8cdb847b3f7028cab3e2c710cb1)), closes [#66](https://github.com/yuzheng14/ani-dock/issues/66)
+* refresh imported anime episodes ([#87](https://github.com/yuzheng14/ani-dock/issues/87)) ([94175b5](https://github.com/yuzheng14/ani-dock/commit/94175b50a38e8a5e73379d7d2d94f5fec5007d0c))
+
+
+### Bug Fixes
+
+* **frontend:** constrain long download failure reasons ([#90](https://github.com/yuzheng14/ani-dock/issues/90)) ([7a22791](https://github.com/yuzheng14/ani-dock/commit/7a22791b7f0f328e63fcc8cf27ca322669d2a976)), closes [#64](https://github.com/yuzheng14/ani-dock/issues/64)
+* **frontend:** keep proxy input controlled ([#93](https://github.com/yuzheng14/ani-dock/issues/93)) ([f87d6e1](https://github.com/yuzheng14/ani-dock/commit/f87d6e1bc89e854b0615a93e06e0f64aab8c59f4)), closes [#89](https://github.com/yuzheng14/ani-dock/issues/89)
+
 ## [0.1.2](https://github.com/yuzheng14/ani-dock/compare/v0.1.1...v0.1.2) (2026-08-24)
 
 
