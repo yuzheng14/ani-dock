@@ -203,6 +203,15 @@ where
             Err(EpisodeDownloadError::Http(error))
                 if attempt < max_attempts && is_retryable_segment_download_error(&error) =>
             {
+                tracing::warn!(
+                    error = %error,
+                    attempt,
+                    max_attempts,
+                    next_attempt = attempt + 1,
+                    retry_delay_ms = retry_delay.as_millis(),
+                    segment = %path.display(),
+                    "分片下载失败，将进行重试"
+                );
                 time::sleep(retry_delay).await;
             }
             Err(error) => return Err(error),
