@@ -167,7 +167,7 @@ function RouteComponent() {
           <Input
             id="proxy"
             placeholder="http://127.0.0.1:7890"
-            value={form.proxy ?? undefined}
+            value={form.proxy ?? ''}
             onChange={(e) =>
               set('proxy', e.target.value === '' ? null : e.target.value)
             }
