@@ -57,14 +57,14 @@ function DownloadStatus({ de }: { de: DownloadEvent }) {
         <TooltipTrigger
           render={
             <span
-              className="block cursor-help [overflow-wrap:anywhere] text-destructive"
+              className="cursor-help wrap-anywhere text-destructive"
               tabIndex={0}
             />
           }
         >
           {message}
         </TooltipTrigger>
-        <TooltipContent className="max-w-sm [overflow-wrap:anywhere] whitespace-pre-wrap">
+        <TooltipContent className="max-w-sm wrap-anywhere whitespace-pre-wrap">
           {message}
         </TooltipContent>
       </Tooltip>
