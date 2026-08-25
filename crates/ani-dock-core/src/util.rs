@@ -7,7 +7,7 @@ use crate::{
     RequestClient,
     constant::{API_ORIGIN, ORIGIN},
     request::{
-        JsonResponseExt,
+        JsonResponseExt, SendWithRetryExt,
         anime_video::Video,
         common::{ApiError, CommonResponseBody},
     },
@@ -53,7 +53,7 @@ pub async fn get_anime_video_result_from_sn(
     let anime_video: CommonResponseBody<Video, ApiError> = request_client
         .get(&url, false)
         .header(REFERER, get_referer(sn))
-        .send()
+        .send_with_retry()
         .await?
         .error_for_status()?
         .json_or_log()

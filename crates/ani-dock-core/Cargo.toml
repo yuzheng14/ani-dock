@@ -34,4 +34,4 @@ wreq-util = "2.2.6"
 
 [dev-dependencies]
 anyhow = "1.0.103"
-tokio = { workspace = true, features = ["macros", "rt"] }
+tokio = { workspace = true, features = ["io-util", "macros", "net", "rt"] }
