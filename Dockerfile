@@ -6,7 +6,7 @@
 
 FROM node:24-bookworm-slim AS frontend
 
-RUN npm install -g pnpm@11.18.0
+RUN npm install -g pnpm@11.24.0
 
 WORKDIR /src
 
