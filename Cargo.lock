@@ -98,6 +98,7 @@ dependencies = [
  "chrono",
  "futures",
  "indexmap",
+ "rustc-hash",
  "serde",
  "serde_json",
  "sqlx",

@@ -23,11 +23,14 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 use wreq::header::REFERER;
 
-use crate::CoreEpisode;
+use crate::{CoreEpisode, service::episode_resolver::EpisodeResolver};
+
+pub mod episode_resolver;
 
 #[derive(Debug, Clone)]
 pub struct Services {
     pub download: Downloader,
+    pub episode_resolver: EpisodeResolver,
 }
 
 pub type DownloadState = Result<EpisodeDownloadEvent, Arc<EpisodeDownloadError>>;
@@ -136,6 +139,7 @@ pub struct Downloader {
     queue_tx: mpsc::UnboundedSender<CoreEpisode>,
     tx: broadcast::Sender<DownloadStatus>,
     worker_task: Arc<Mutex<Option<JoinHandle<()>>>>,
+    ep_resolver: EpisodeResolver,
 }
 
 impl Downloader {
@@ -143,8 +147,9 @@ impl Downloader {
         episode_downloader: EpisodeDownloader,
         repo: DownloadQueueRepository,
         shutdown: CancellationToken,
+        ep_resolver: EpisodeResolver,
     ) -> Self {
-        let (downloader, worker) = Self::build(episode_downloader, repo, shutdown);
+        let (downloader, worker) = Self::build(episode_downloader, repo, shutdown, ep_resolver);
         let worker_task = tokio::spawn(worker.run());
         downloader.worker_task.lock().unwrap().replace(worker_task);
 
@@ -158,6 +163,7 @@ impl Downloader {
         episode_downloader: EpisodeDownloader,
         repo: DownloadQueueRepository,
         shutdown: CancellationToken,
+        ep_resolver: EpisodeResolver,
     ) -> (Self, DownloadWorker) {
         let (tx, _) = broadcast::channel(128);
         let (queue_tx, queue_rx) = mpsc::unbounded_channel();
@@ -179,6 +185,7 @@ impl Downloader {
                 tx,
                 queue_tx,
                 worker_task,
+                ep_resolver,
             },
             worker,
         )
@@ -231,6 +238,7 @@ impl Downloader {
         for anime in undownloaded_animes {
             for (_, episodes) in anime.series {
                 for episode in episodes {
+                    self.ep_resolver.update_cache(episode.clone());
                     if !self.exists(episode.sn) {
                         self.schedule_download(episode.into());
                         restored += 1;
@@ -244,23 +252,6 @@ impl Downloader {
 
     pub fn exists(&self, sn: u32) -> bool {
         matches!(self.state_map.lock().unwrap().entry(sn), Entry::Occupied(_))
-    }
-
-    pub fn get_undownloaded_episodes_sn(&self) -> Vec<u32> {
-        self.state_map
-            .lock()
-            .unwrap()
-            .iter()
-            .filter_map(|(sn, state)| {
-                if let Ok(event) = state
-                    && matches!(event, EpisodeDownloadEvent::Completed)
-                {
-                    None
-                } else {
-                    Some(sn.to_owned())
-                }
-            })
-            .collect()
     }
 
     pub fn is_error(&self, sn: u32) -> bool {
@@ -345,7 +336,7 @@ mod tests {
     use ani_dock_core::{Config, Cookie, DeviceId, RequestClient};
     use ani_dock_db::{
         input::{CreateAnime, CreateEpisode},
-        repository::AnimeRepository,
+        repository::{AnimeRepository, EpisodeRepository},
     };
     use sqlx::SqlitePool;
     use tokio::sync::{Barrier, oneshot};
@@ -381,8 +372,14 @@ mod tests {
         let request_client = Arc::new(RequestClient::new(&config, Cookie::default()).unwrap());
         let config = Arc::new(Mutex::new(config));
         let inner = EpisodeDownloader::new(request_client, config, DeviceId::default());
+        let episode_resolver = EpisodeResolver::new(EpisodeRepository::new(pool.clone()));
 
-        Downloader::build(inner, DownloadQueueRepository::new(pool), shutdown)
+        Downloader::build(
+            inner,
+            DownloadQueueRepository::new(pool),
+            shutdown,
+            episode_resolver,
+        )
     }
 
     fn assert_queue_empty(worker: &mut DownloadWorker) {
@@ -464,7 +461,7 @@ mod tests {
             .await
             .expect("downloaded fixture should be marked completed");
 
-        let (downloader, mut worker) = test_downloader_parts_with_pool(pool);
+        let (downloader, mut worker) = test_downloader_parts_with_pool(pool.clone());
 
         assert_eq!(
             downloader
@@ -482,6 +479,21 @@ mod tests {
             PENDING_SN
         );
         assert_queue_empty(&mut worker);
+
+        sqlx::query("UPDATE episode SET cover = ? WHERE sn = ?")
+            .bind("https://example.com/changed-after-restore.jpg")
+            .bind(PENDING_SN)
+            .execute(&pool)
+            .await
+            .expect("episode fixture should be updated after restoration");
+
+        let cached = downloader
+            .ep_resolver
+            .resolve(PENDING_SN)
+            .await
+            .expect("cached episode lookup should succeed")
+            .expect("restored episode should be cached");
+        assert_eq!(cached.cover, "https://example.com/pending.jpg");
 
         assert_eq!(
             downloader

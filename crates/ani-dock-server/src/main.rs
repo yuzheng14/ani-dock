@@ -13,7 +13,7 @@ use ani_dock_db::{
 };
 use ani_dock_server::{
     router::{AppState, DbRepository, get_app_router},
-    service::{Downloader, Services},
+    service::{Downloader, Services, episode_resolver::EpisodeResolver},
 };
 use anyhow::Context;
 use axum::serve;
@@ -91,11 +91,13 @@ async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
     let downloader = EpisodeDownloader::new(request_client.clone(), config.clone(), device_id);
     let shutdown = CancellationToken::new();
 
+    let episode_repo = EpisodeRepository::new(pool.clone());
+    let episode_resolver = EpisodeResolver::new(episode_repo.clone());
     let state = AppState {
         shutdown: shutdown.clone(),
         db: DbRepository {
             anime: AnimeRepository::new(pool.clone()),
-            episode: EpisodeRepository::new(pool.clone()),
+            episode: episode_repo.clone(),
             download_queue: DownloadQueueRepository::new(pool.clone()),
             cover_image: CoverImageRepository::new(pool.clone()),
         },
@@ -105,7 +107,9 @@ async fn start_server() -> Result<(), Box<dyn std::error::Error>> {
                 downloader,
                 DownloadQueueRepository::new(pool.clone()),
                 shutdown.child_token(),
+                episode_resolver.clone(),
             ),
+            episode_resolver,
         },
         config,
         cookie,

@@ -73,7 +73,7 @@ pub(crate) mod test_helpers {
     use tokio_util::sync::CancellationToken;
 
     use super::{AppState, DbRepository};
-    use crate::service::{Downloader, Services};
+    use crate::service::{Downloader, Services, episode_resolver::EpisodeResolver};
 
     pub(crate) fn app_state(pool: SqlitePool) -> AppState {
         app_state_with_config(pool, Config::default())
@@ -89,11 +89,13 @@ pub(crate) mod test_helpers {
             EpisodeDownloader::new(request_client.clone(), config.clone(), DeviceId::default());
         let shutdown = CancellationToken::new();
 
+        let episode_repo = EpisodeRepository::new(pool.clone());
+        let episode_resolver = EpisodeResolver::new(episode_repo.clone());
         AppState {
             shutdown: shutdown.clone(),
             db: DbRepository {
                 anime: AnimeRepository::new(pool.clone()),
-                episode: EpisodeRepository::new(pool.clone()),
+                episode: episode_repo.clone(),
                 download_queue: DownloadQueueRepository::new(pool.clone()),
                 cover_image: CoverImageRepository::new(pool.clone()),
             },
@@ -103,7 +105,9 @@ pub(crate) mod test_helpers {
                     episode_downloader,
                     DownloadQueueRepository::new(pool),
                     shutdown.child_token(),
+                    episode_resolver.clone(),
                 ),
+                episode_resolver,
             },
             config,
             cookie,

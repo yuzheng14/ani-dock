@@ -413,22 +413,32 @@ impl EpisodeRepository {
         Ok(episode.map(Into::into))
     }
 
-    pub async fn update_cover_id(&self, id: Uuid, cover_id: Uuid) -> DbResult {
+    pub async fn update_cover_id(&self, id: Uuid, cover_id: Uuid) -> DbResult<Episode> {
         let now = Local::now();
-        sqlx::query!(
+        let ep = sqlx::query_as!(
+            EpisodeRow,
             r#"
             UPDATE episode
             SET
                 cover_id = $1,
                 update_at = $2
-            WHERE id = $3"#,
+            WHERE id = $3
+            RETURNING
+                id as "id: Hyphenated",
+                sn as "sn: u32",
+                cover,
+                cover_id as "cover_id?: Hyphenated",
+                episode as "episode: u32",
+                series_id as "series_id: Hyphenated",
+                create_at as "create_at: DateTime<Local>",
+                update_at as "update_at: DateTime<Local>""#,
             cover_id.to_string(),
             now,
             id.to_string()
         )
-        .execute(&self.pool)
+        .fetch_one(&self.pool)
         .await?;
-        Ok(())
+        Ok(ep.into())
     }
 }
 
@@ -1208,7 +1218,7 @@ mod download_queue_repository_tests {
 mod episode_repository_tests {
     use sqlx::SqlitePool;
 
-    use super::test_helpers::{insert_cover_image, set_episode_cover_id};
+    use super::test_helpers::insert_cover_image;
     use super::*;
     use crate::input::CreateEpisode;
 
@@ -1247,18 +1257,20 @@ mod episode_repository_tests {
             })
             .await?;
 
-        let cover_id = insert_cover_image(&pool, "https://example.com/3499.jpg").await?;
-        set_episode_cover_id(&pool, 3499, cover_id).await?;
-
         let episode = episode_repository
             .select(3499)
             .await?
             .expect("应该返回对应 SN 的剧集");
+        let cover_id = insert_cover_image(&pool, "https://example.com/3499.jpg").await?;
+        let episode = episode_repository
+            .update_cover_id(episode.id, cover_id)
+            .await?;
 
         assert_eq!(episode.sn, 3499);
         assert_eq!(episode.cover, "https://example.com/3499.jpg");
         assert_eq!(episode.cover_id, Some(cover_id));
         assert_eq!(episode.episode, 1);
+        assert_eq!(episode_repository.select(3499).await?, Some(episode));
 
         Ok(())
     }
