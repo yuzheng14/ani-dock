@@ -153,7 +153,7 @@ function AddAnimeButton() {
 
 function DownloadButton({ anime }: { anime: Anime }) {
   const selectedSn = useRef<Record<string, string[]>>({
-    本篇: anime.series['本篇'].map((e) => e.sn.toString()) ?? [],
+    本篇: anime.series['本篇']?.map((e) => e.sn.toString()) ?? [],
   })
   const mutation = useMutation({
     mutationFn: async (rowSns: string[]) => {
