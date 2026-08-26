@@ -62,6 +62,14 @@ pub async fn select_animes(
         state.db.anime.select_all().await?
     };
 
+    for anime in animes.iter() {
+        for (_, eps) in anime.series.iter() {
+            for ep in eps.iter() {
+                state.services.episode_resolver.update_cache(ep.clone());
+            }
+        }
+    }
+
     Ok((StatusCode::OK, Json(animes)))
 }
 
@@ -91,6 +99,11 @@ pub async fn get_cover(
         let Some(episode) = state.db.episode.select_one_by_anime_id(anime.id).await? else {
             return Ok(cover::not_found());
         };
+
+        state
+            .services
+            .episode_resolver
+            .update_cache(episode.clone());
 
         let cover_image = request_cover(
             &state.request_client,

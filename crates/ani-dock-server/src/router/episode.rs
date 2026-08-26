@@ -1,9 +1,6 @@
 use std::convert::Infallible;
 
-use ani_dock_db::{
-    model::Episode,
-    repository::{DbResult, EpisodeRepository},
-};
+use ani_dock_db::{model::Episode, repository::DbResult};
 use anyhow::Context;
 use axum::{
     Json, Router,
@@ -23,13 +20,12 @@ use ts_rs::TS;
 use crate::{
     ApiError, ApiResult, CoreEpisode,
     router::{AppState, cover},
-    service::{DownloadState, DownloadStatus, request_cover},
+    service::{DownloadState, DownloadStatus, episode_resolver::EpisodeResolver, request_cover},
 };
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/download", put(download))
-        .route("/undownloaded", get(get_undownload_episodes))
         .route("/download/events", get(download_events))
         .route("/{id_or_sn}/cover", get(get_cover))
 }
@@ -38,12 +34,17 @@ pub async fn download(
     State(state): State<AppState>,
     Json(sn_list): Json<Vec<u32>>,
 ) -> ApiResult<StatusCode> {
-    let episodes = try_join_all(sn_list.into_iter().map(|sn| {
-        // let compiler happy
-        let state = state.clone();
-        async move { Ok::<_, sqlx::Error>((sn, state.db.episode.select(sn).await?)) }
-    }))
-    .await?;
+    let episodes =
+        try_join_all(
+            sn_list.into_iter().map(|sn| {
+                // let compiler happy
+                let state = state.clone();
+                async move {
+                    Ok::<_, sqlx::Error>((sn, state.services.episode_resolver.resolve(sn).await?))
+                }
+            }),
+        )
+        .await?;
 
     let episodes = episodes
         .into_iter()
@@ -65,25 +66,6 @@ pub async fn download(
     Ok(StatusCode::ACCEPTED)
 }
 
-pub async fn get_undownload_episodes(
-    State(state): State<AppState>,
-) -> ApiResult<Json<Vec<Episode>>> {
-    let episodes = try_join_all(
-        state
-            .services
-            .download
-            .get_undownloaded_episodes_sn()
-            .into_iter()
-            .map(async |sn| state.db.episode.select(sn).await),
-    )
-    .await?
-    .into_iter()
-    .flatten()
-    .collect();
-
-    Ok(Json(episodes))
-}
-
 #[derive(Debug, Clone, Serialize, TS)]
 #[ts(export)]
 pub struct DownloadEvent {
@@ -94,9 +76,12 @@ pub struct DownloadEvent {
 impl DownloadEvent {
     pub async fn from_download_status(
         ds: DownloadStatus,
-        repo: &EpisodeRepository,
+        resolver: &EpisodeResolver,
     ) -> DbResult<Self> {
-        let episode = repo.select(ds.sn).await?.ok_or(sqlx::Error::RowNotFound)?;
+        let episode = resolver
+            .resolve(ds.sn)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)?;
 
         Ok(Self {
             episode,
@@ -113,10 +98,11 @@ pub async fn download_events(
 
     let snapshot = state.services.download.state_snapshot();
 
+    let resolver = state.services.episode_resolver.clone();
     let snapshot = try_join_all(
         snapshot
             .into_iter()
-            .map(async |ds| DownloadEvent::from_download_status(ds, &state.db.episode).await),
+            .map(|ds| async { DownloadEvent::from_download_status(ds, &resolver).await }),
     )
     .await?;
 
@@ -125,12 +111,11 @@ pub async fn download_events(
         .json_data(snapshot)
         .map_err(ApiError::SSEEventJsonDataConvert)?;
 
-    let repo = state.db.episode.clone();
     let updates = BroadcastStream::new(rx).filter_map(move |ds| {
-        let repo = repo.clone();
+        let resolver = state.services.episode_resolver.clone();
         async move {
             let de = match ds {
-                Ok(ds) => match DownloadEvent::from_download_status(ds, &repo).await {
+                Ok(ds) => match DownloadEvent::from_download_status(ds, &resolver).await {
                     Ok(de) => de,
                     Err(err) => {
                         tracing::error!(error = %err, "下载接收端解析剧集失败");
@@ -178,6 +163,11 @@ pub async fn get_cover(
         return Ok(cover::not_found());
     };
 
+    state
+        .services
+        .episode_resolver
+        .update_cache(episode.clone());
+
     let cover_image = if let Some(cover_id) = episode.cover_id {
         state
             .db
@@ -196,12 +186,14 @@ pub async fn get_cover(
         )
         .await?;
 
-        state
+        let ep = state
             .db
             .episode
             .update_cover_id(episode.id, cover_image.id)
             .await
             .context("更新剧集的封面资源引用出错")?;
+
+        state.services.episode_resolver.update_cache(ep);
 
         cover_image
     };
