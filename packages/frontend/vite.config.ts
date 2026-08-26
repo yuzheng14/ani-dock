@@ -42,7 +42,7 @@ export default defineConfig({
             enabled: true,
             provider: playwright(),
             instances: [{ browser: 'chromium' }],
-            headless: Boolean(process.env.CI),
+            headless: true,
           },
         },
       },
