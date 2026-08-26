@@ -32,7 +32,18 @@ const anime: Anime = {
   update_at: '2026-08-25T00:00:00Z',
 }
 
-async function renderDownloadButton() {
+const longAnime: Anime = {
+  ...anime,
+  id: 'long-anime',
+  name: '长篇测试动画',
+  series: {
+    本篇: Array.from({ length: 120 }, (_, index) =>
+      episode(`long-episode-${index + 1}`, 1000 + index, index + 1)
+    ),
+  },
+}
+
+async function renderDownloadButton(fixture = anime) {
   const queryClient = new QueryClient({
     defaultOptions: {
       mutations: { retry: false },
@@ -41,11 +52,11 @@ async function renderDownloadButton() {
 
   await render(
     <QueryClientProvider client={queryClient}>
-      <DownloadButton anime={anime} />
+      <DownloadButton anime={fixture} />
     </QueryClientProvider>
   )
 
-  await page.getByRole('button', { name: '下载《测试动画》' }).click()
+  await page.getByRole('button', { name: `下载《${fixture.name}》` }).click()
 
   return page.getByRole('dialog')
 }
@@ -123,4 +134,19 @@ test('submits only the selected episodes', async () => {
     },
     body: JSON.stringify([102, 201, 202]),
   })
+})
+
+test('keeps the footer visible while long episode lists scroll', async () => {
+  await page.viewport(1280, 800)
+  const dialog = await renderDownloadButton(longAnime)
+  const episodeList = dialog
+    .element()
+    .querySelector<HTMLElement>('[data-slot="field-group"]')
+
+  if (!episodeList) throw new Error('Episode list was not rendered')
+
+  expect(episodeList.scrollHeight).toBeGreaterThan(episodeList.clientHeight)
+  await expect
+    .element(dialog.getByRole('button', { name: '确认' }))
+    .toBeInViewport({ ratio: 1 })
 })

@@ -266,7 +266,7 @@ export function DownloadButton({ anime }: { anime: Anime }) {
             </Button>
           </div>
         </div>
-        <FieldGroup className="min-h-0 overflow-y-auto pr-1">
+        <FieldGroup className="max-h-[50dvh] overflow-y-auto pr-1">
           {Object.entries(anime.series).map(([name, episodes]) => (
             <Field key={name}>
               <div className="flex flex-wrap items-center justify-between gap-2">
