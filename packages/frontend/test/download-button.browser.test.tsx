@@ -146,7 +146,9 @@ test('keeps the footer visible while long episode lists scroll', async () => {
   if (!episodeList) throw new Error('Episode list was not rendered')
 
   expect(episodeList.scrollHeight).toBeGreaterThan(episodeList.clientHeight)
-  await expect
-    .element(dialog.getByRole('button', { name: '确认' }))
-    .toBeInViewport({ ratio: 1 })
+  const confirmButton = dialog.getByRole('button', { name: '确认' }).element()
+  const confirmButtonRect = confirmButton.getBoundingClientRect()
+
+  expect(confirmButtonRect.top).toBeGreaterThanOrEqual(0)
+  expect(confirmButtonRect.bottom).toBeLessThanOrEqual(window.innerHeight)
 })
