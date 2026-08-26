@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.4](https://github.com/yuzheng14/ani-dock/compare/v0.1.3...v0.1.4) (2026-08-26)
+
+
+### Bug Fixes
+
+* **core:** restore segment retry warning logs ([#99](https://github.com/yuzheng14/ani-dock/issues/99)) ([01a2b92](https://github.com/yuzheng14/ani-dock/commit/01a2b92a3a8c85aa5a011a676a7e75a49a81d0b2))
+* **frontend:** handle anime without main series ([#102](https://github.com/yuzheng14/ani-dock/issues/102)) ([dd4899d](https://github.com/yuzheng14/ani-dock/commit/dd4899d87094ad85a5633e79e967c413fc2ba822)), closes [#101](https://github.com/yuzheng14/ani-dock/issues/101)
+
+
+### Dependencies
+
+* Update docker/dockerfile Docker tag to v1.26 ([#96](https://github.com/yuzheng14/ani-dock/issues/96)) ([bf68373](https://github.com/yuzheng14/ani-dock/commit/bf68373a84b6e76afe162b47098a396eacf42128))
+* Update rust Docker tag to v1.98 ([#97](https://github.com/yuzheng14/ani-dock/issues/97)) ([a44fea0](https://github.com/yuzheng14/ani-dock/commit/a44fea0372fcfdf61ebc63f6f68a77c4937b2fc2))
+
+
+### Performance
+
+* **server:** cache episode metadata ([#100](https://github.com/yuzheng14/ani-dock/issues/100)) ([2e9f7e0](https://github.com/yuzheng14/ani-dock/commit/2e9f7e0b778ec856cbf717260d414a92a4b71d75)), closes [#27](https://github.com/yuzheng14/ani-dock/issues/27)
+
 ## [0.1.3](https://github.com/yuzheng14/ani-dock/compare/v0.1.2...v0.1.3) (2026-08-25)
 
 
