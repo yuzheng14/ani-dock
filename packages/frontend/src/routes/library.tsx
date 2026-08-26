@@ -151,10 +151,40 @@ function AddAnimeButton() {
   )
 }
 
-function DownloadButton({ anime }: { anime: Anime }) {
-  const selectedSn = useRef<Record<string, string[]>>({
-    本篇: anime.series['本篇']?.map((e) => e.sn.toString()) ?? [],
-  })
+function getEpisodeSnsBySeries(anime: Anime) {
+  return Object.fromEntries(
+    Object.entries(anime.series).map(([name, episodes]) => [
+      name,
+      episodes.map((episode) => episode.sn.toString()),
+    ])
+  )
+}
+
+function getDefaultSelectedSns(episodeSnsBySeries: Record<string, string[]>) {
+  return Object.fromEntries(
+    Object.entries(episodeSnsBySeries).map(([name, episodeSns]) => [
+      name,
+      name === '本篇' ? [...episodeSns] : [],
+    ])
+  )
+}
+
+export function DownloadButton({ anime }: { anime: Anime }) {
+  const episodeSnsBySeries = useMemo(
+    () => getEpisodeSnsBySeries(anime),
+    [anime]
+  )
+  const [selectedSns, setSelectedSns] = useState(() =>
+    getDefaultSelectedSns(episodeSnsBySeries)
+  )
+  const totalEpisodeCount = Object.values(episodeSnsBySeries).reduce(
+    (count, episodeSns) => count + episodeSns.length,
+    0
+  )
+  const selectedEpisodeCount = Object.values(selectedSns).reduce(
+    (count, episodeSns) => count + episodeSns.length,
+    0
+  )
   const mutation = useMutation({
     mutationFn: async (rowSns: string[]) => {
       const sns = rowSns.map((sn) => Number(sn))
@@ -188,7 +218,7 @@ function DownloadButton({ anime }: { anime: Anime }) {
       >
         {mutation.isPending ? <Spinner /> : <DownloadIcon />}
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>选择要下载的剧集</DialogTitle>
           <DialogDescription>
@@ -197,22 +227,99 @@ function DownloadButton({ anime }: { anime: Anime }) {
             选中要下载的剧集点击确认即可
           </DialogDescription>
         </DialogHeader>
-        <FieldGroup>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-medium">所有剧集</p>
+          <div className="flex gap-1">
+            <Button
+              type="button"
+              size={'sm'}
+              variant={'outline'}
+              onClick={() =>
+                setSelectedSns(
+                  Object.fromEntries(
+                    Object.entries(episodeSnsBySeries).map(
+                      ([name, episodeSns]) => [name, [...episodeSns]]
+                    )
+                  )
+                )
+              }
+              disabled={
+                mutation.isPending || selectedEpisodeCount === totalEpisodeCount
+              }
+            >
+              全部选中
+            </Button>
+            <Button
+              type="button"
+              size={'sm'}
+              variant={'outline'}
+              onClick={() =>
+                setSelectedSns(
+                  Object.fromEntries(
+                    Object.keys(episodeSnsBySeries).map((name) => [name, []])
+                  )
+                )
+              }
+              disabled={mutation.isPending || selectedEpisodeCount === 0}
+            >
+              全部清空
+            </Button>
+          </div>
+        </div>
+        <FieldGroup className="max-h-[50dvh] overflow-y-auto pr-1">
           {Object.entries(anime.series).map(([name, episodes]) => (
             <Field key={name}>
-              <FieldLabel>{name}</FieldLabel>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <FieldLabel>{name}</FieldLabel>
+                <div className="flex gap-1">
+                  <Button
+                    type="button"
+                    size={'xs'}
+                    variant={'ghost'}
+                    aria-label={`全选${name}`}
+                    onClick={() =>
+                      setSelectedSns((current) => ({
+                        ...current,
+                        [name]: [...episodeSnsBySeries[name]],
+                      }))
+                    }
+                    disabled={
+                      mutation.isPending ||
+                      selectedSns[name]?.length === episodes.length
+                    }
+                  >
+                    全选
+                  </Button>
+                  <Button
+                    type="button"
+                    size={'xs'}
+                    variant={'ghost'}
+                    aria-label={`清空${name}`}
+                    onClick={() =>
+                      setSelectedSns((current) => ({
+                        ...current,
+                        [name]: [],
+                      }))
+                    }
+                    disabled={mutation.isPending || !selectedSns[name]?.length}
+                  >
+                    清空
+                  </Button>
+                </div>
+              </div>
               <ToggleGroup
                 variant={'outline'}
-                defaultValue={
-                  name === '本篇'
-                    ? episodes.map((e) => e.sn.toString())
-                    : undefined
-                }
+                value={selectedSns[name] ?? []}
                 multiple
                 className={'flex-wrap'}
+                aria-label={`${name}剧集`}
                 onValueChange={(groupValue) =>
-                  (selectedSn.current[name] = groupValue)
+                  setSelectedSns((current) => ({
+                    ...current,
+                    [name]: groupValue,
+                  }))
                 }
+                disabled={mutation.isPending}
               >
                 {episodes.map((episode) => (
                   <ToggleGroupItem
@@ -229,16 +336,24 @@ function DownloadButton({ anime }: { anime: Anime }) {
         {mutation.isError && (
           <p className="text-sm text-destructive">{mutation.error.message}</p>
         )}
+        <p
+          role="status"
+          aria-live="polite"
+          className="text-sm text-muted-foreground"
+        >
+          已选择 {selectedEpisodeCount} / {totalEpisodeCount} 集
+          {selectedEpisodeCount === 0 && '，请至少选择 1 集'}
+        </p>
         <DialogFooter>
           <DialogClose render={<Button variant={'outline'} />}>
             取消
           </DialogClose>
           <Button
-            type="submit"
+            type="button"
             onClick={() => {
-              mutation.mutate(Object.values(selectedSn.current).flat())
+              mutation.mutate(Object.values(selectedSns).flat())
             }}
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || selectedEpisodeCount === 0}
           >
             {mutation.isPending ? '正在提交...' : '确认'}
           </Button>
