@@ -12,6 +12,11 @@
 
 - Whenever parsing an HTTP response body as JSON, use the project's `JsonResponseExt::json_or_log` wrapper instead of the HTTP client's native `.json()` method.
 
+## GitHub issues and pull requests
+
+- Write all issues and pull requests entirely in English.
+- Add at least one applicable priority label to every issue.
+
 ## Production code changes
 
 - Do not modify production code unless the user has explicitly approved direct production-code edits.

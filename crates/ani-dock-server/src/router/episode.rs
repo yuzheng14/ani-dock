@@ -1,5 +1,6 @@
 use std::convert::Infallible;
 
+use ani_dock_core::EpisodeDownloadEvent;
 use ani_dock_db::{model::Episode, repository::DbResult};
 use anyhow::Context;
 use axum::{
@@ -28,9 +29,10 @@ pub fn router() -> Router<AppState> {
         .route("/download", put(download))
         .route("/download/events", get(download_events))
         .route("/{id_or_sn}/cover", get(get_cover))
+        .route("/downloaded", get(get_downloaded))
 }
 
-pub async fn download(
+async fn download(
     State(state): State<AppState>,
     Json(sn_list): Json<Vec<u32>>,
 ) -> ApiResult<StatusCode> {
@@ -90,7 +92,7 @@ impl DownloadEvent {
     }
 }
 
-pub async fn download_events(
+async fn download_events(
     State(state): State<AppState>,
 ) -> ApiResult<Sse<impl Stream<Item = Result<Event, Infallible>>>> {
     let shutdown = state.shutdown.clone();
@@ -99,11 +101,13 @@ pub async fn download_events(
     let snapshot = state.services.download.state_snapshot();
 
     let resolver = state.services.episode_resolver.clone();
-    let snapshot = try_join_all(
-        snapshot
-            .into_iter()
-            .map(|ds| async { DownloadEvent::from_download_status(ds, &resolver).await }),
-    )
+    let snapshot = try_join_all(snapshot.into_iter().filter_map(|ds| {
+        if matches!(ds.state, Ok(EpisodeDownloadEvent::Completed)) {
+            None
+        } else {
+            Some(async { DownloadEvent::from_download_status(ds, &resolver).await })
+        }
+    }))
     .await?;
 
     let snapshot = Event::default()
@@ -148,7 +152,7 @@ pub async fn download_events(
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
 
-pub async fn get_cover(
+async fn get_cover(
     State(state): State<AppState>,
     Path(id_or_sn): Path<String>,
     request_headers: HeaderMap,
@@ -199,6 +203,99 @@ pub async fn get_cover(
     };
 
     Ok(cover::response(&request_headers, cover_image))
+}
+
+async fn get_downloaded(State(state): State<AppState>) -> ApiResult<Json<Vec<Episode>>> {
+    let episodes = state.db.episode.select_by_download_status(true).await?;
+
+    Ok(Json(episodes))
+}
+
+#[cfg(test)]
+mod download_tests {
+    use ani_dock_core::Config;
+    use ani_dock_db::{
+        input::{CreateAnime, CreateEpisode},
+        repository::AnimeRepository,
+    };
+    use indexmap::IndexMap;
+    use sqlx::SqlitePool;
+
+    use super::*;
+    use crate::router::test_helpers::app_state_with_config;
+
+    #[sqlx::test(migrations = "../ani-dock-db/migrations")]
+    async fn get_downloaded_returns_only_completed_episodes(pool: SqlitePool) {
+        const PENDING_SN: u32 = 3_499;
+        const COMPLETED_SN: u32 = 3_500;
+
+        AnimeRepository::new(pool.clone())
+            .insert(CreateAnime {
+                sn: 59_221,
+                cover: "https://example.com/anime.jpg".to_owned(),
+                name: "進擊的巨人".to_owned(),
+                series: IndexMap::from([(
+                    "本篇".to_owned(),
+                    vec![
+                        CreateEpisode {
+                            sn: PENDING_SN,
+                            cover: "https://example.com/pending.jpg".to_owned(),
+                            episode: 1,
+                        },
+                        CreateEpisode {
+                            sn: COMPLETED_SN,
+                            cover: "https://example.com/completed.jpg".to_owned(),
+                            episode: 2,
+                        },
+                    ],
+                )]),
+            })
+            .await
+            .expect("episode fixtures should be inserted");
+
+        let state = app_state_with_config(
+            pool,
+            Config {
+                proxy: Some("http://127.0.0.1:1".to_owned()),
+                ..Config::default()
+            },
+        );
+        for (sn, episode) in [(PENDING_SN, 1), (COMPLETED_SN, 2)] {
+            assert!(
+                state
+                    .db
+                    .download_queue
+                    .insert_by_episode_or_ignore(CoreEpisode::new(sn, episode, ""))
+                    .await
+                    .expect("episode should be queued")
+            );
+        }
+        state
+            .db
+            .download_queue
+            .mark_downloaded(COMPLETED_SN)
+            .await
+            .expect("completed fixture should be marked downloaded");
+
+        let Json(episodes) = get_downloaded(State(state.clone()))
+            .await
+            .expect("downloaded episodes should be returned");
+        assert_eq!(
+            episodes
+                .iter()
+                .map(|episode| episode.sn)
+                .collect::<Vec<_>>(),
+            vec![COMPLETED_SN]
+        );
+
+        state.shutdown.cancel();
+        state
+            .services
+            .download
+            .wait_for_worker()
+            .await
+            .expect("download worker should stop");
+    }
 }
 
 #[cfg(test)]
