@@ -440,6 +440,32 @@ impl EpisodeRepository {
         .await?;
         Ok(ep.into())
     }
+
+    pub async fn select_by_download_status(&self, downloaded: bool) -> DbResult<Vec<Episode>> {
+        let episodes = sqlx::query_as!(
+            EpisodeRow,
+            r#"
+            SELECT
+                e.id AS "id: Hyphenated",
+                e.episode AS "episode: u32",
+                e.cover,
+                e.sn AS "sn: u32",
+                e.series_id AS "series_id: Hyphenated",
+                e.cover_id AS "cover_id?: Hyphenated",
+
+                e.create_at AS "create_at: DateTime<Local>",
+                e.update_at AS "update_at: DateTime<Local>"
+            FROM download_queue as dq
+            INNER JOIN episode as e ON dq.episode_id = e.id
+            WHERE dq.downloaded = $1
+            ORDER BY dq.update_at DESC"#,
+            downloaded
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(episodes.into_iter().map(Into::into).collect())
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1216,9 +1242,10 @@ mod download_queue_repository_tests {
 
 #[cfg(test)]
 mod episode_repository_tests {
+    use chrono::Duration;
     use sqlx::SqlitePool;
 
-    use super::test_helpers::insert_cover_image;
+    use super::test_helpers::{enqueue, insert_anime, insert_cover_image};
     use super::*;
     use crate::input::CreateEpisode;
 
@@ -1342,6 +1369,82 @@ mod episode_repository_tests {
         assert_eq!(anime.len(), 1);
         assert_eq!(anime[0].series.len(), 1);
         assert_eq!(anime[0].series["第一季"].len(), 2);
+
+        Ok(())
+    }
+
+    #[sqlx::test]
+    async fn select_by_download_status_filters_and_orders_by_latest_queue_update(
+        pool: SqlitePool,
+    ) -> DbResult {
+        let anime_repository = AnimeRepository::new(pool.clone());
+        let episode_repository = EpisodeRepository::new(pool.clone());
+        insert_anime(
+            &anime_repository,
+            59_221,
+            IndexMap::from([(
+                "本篇".to_owned(),
+                vec![
+                    CreateEpisode {
+                        sn: 3_499,
+                        cover: "https://example.com/3499.jpg".to_owned(),
+                        episode: 1,
+                    },
+                    CreateEpisode {
+                        sn: 3_500,
+                        cover: "https://example.com/3500.jpg".to_owned(),
+                        episode: 2,
+                    },
+                    CreateEpisode {
+                        sn: 3_501,
+                        cover: "https://example.com/3501.jpg".to_owned(),
+                        episode: 3,
+                    },
+                    CreateEpisode {
+                        sn: 3_502,
+                        cover: "https://example.com/3502.jpg".to_owned(),
+                        episode: 4,
+                    },
+                ],
+            )]),
+        )
+        .await?;
+
+        let now = Local::now();
+        for (sn, downloaded, update_at) in [
+            (3_499, true, now.clone() - Duration::minutes(3)),
+            (3_500, false, now.clone() - Duration::minutes(2)),
+            (3_501, true, now.clone() - Duration::minutes(1)),
+            (3_502, true, now),
+        ] {
+            enqueue(&pool, sn, downloaded).await?;
+            sqlx::query!(
+                r#"
+                UPDATE download_queue
+                SET update_at = $1
+                WHERE episode_id = (SELECT id FROM episode WHERE sn = $2)
+                "#,
+                update_at,
+                sn,
+            )
+            .execute(&pool)
+            .await?;
+        }
+
+        let downloaded = episode_repository.select_by_download_status(true).await?;
+        assert_eq!(
+            downloaded
+                .iter()
+                .map(|episode| episode.sn)
+                .collect::<Vec<_>>(),
+            vec![3_502, 3_501, 3_499]
+        );
+
+        let pending = episode_repository.select_by_download_status(false).await?;
+        assert_eq!(
+            pending.iter().map(|episode| episode.sn).collect::<Vec<_>>(),
+            vec![3_500]
+        );
 
         Ok(())
     }

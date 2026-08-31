@@ -9,7 +9,6 @@ import {
 import {
   Item,
   ItemContent,
-  ItemDescription,
   ItemGroup,
   ItemMedia,
   ItemTitle,
@@ -19,6 +18,7 @@ import {
   ProgressLabel,
   ProgressValue,
 } from '@/components/ui/progress'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from '@/components/ui/toast'
 import {
   Tooltip,
@@ -29,7 +29,9 @@ import {
   observeDownloadEventStream,
   type DownloadEventStreamStatus,
 } from '@/lib/download-event-stream'
-import type { DownloadEvent } from '@ani-dock/shared-type'
+import { cn } from '@/lib/utils'
+import type { DownloadEvent, Episode } from '@ani-dock/shared-type'
+import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import {
   CircleAlert,
@@ -48,9 +50,9 @@ export const Route = createFileRoute('/downloading')({
   component: RouteComponent,
 })
 
-function DownloadStatus({ de }: { de: DownloadEvent }) {
-  if ('Err' in de.state) {
-    const message = `下载失败，原因：${de.state.Err}`
+function DownloadStatus({ state }: { state: DownloadEvent['state'] }) {
+  if ('Err' in state) {
+    const message = `下载失败，原因：${state.Err}`
 
     return (
       <Tooltip>
@@ -71,7 +73,7 @@ function DownloadStatus({ de }: { de: DownloadEvent }) {
     )
   }
 
-  switch (de.state.Ok.type) {
+  switch (state.Ok.type) {
     case 'PENDING': {
       return '排队中'
     }
@@ -88,9 +90,7 @@ function DownloadStatus({ de }: { de: DownloadEvent }) {
       return (
         <Progress
           value={
-            de.state.Ok.total > 0
-              ? (de.state.Ok.completed / de.state.Ok.total) * 100
-              : 0
+            state.Ok.total > 0 ? (state.Ok.completed / state.Ok.total) * 100 : 0
           }
         >
           <ProgressLabel>下载片段中</ProgressLabel>
@@ -131,72 +131,123 @@ function ImageWithFallback(
   )
 }
 
+function DownloadItems({
+  downloadEvents,
+}: {
+  downloadEvents: DownloadEvent[]
+}) {
+  return downloadEvents.length ? (
+    <ItemGroup className="gap-2">
+      {downloadEvents.map((de) => (
+        <Item key={de.episode.id} variant={'outline'} role="listitem">
+          <ItemMedia variant={'image'}>
+            <ImageWithFallback
+              src={`/api/episodes/${de.episode.id}/cover`}
+              width={32}
+              height={32}
+              className="object-cover"
+              fallback={<ImageOff className="size-4" />}
+            />
+          </ItemMedia>
+          <ItemContent>
+            <ItemTitle className="line-clamp-1">
+              第 {de.episode.episode} 集 - {de.episode.sn}
+            </ItemTitle>
+
+            {/* original ItemDescription use <p> which will produce a error like `<p> cannot contain a nested <div>` */}
+            <div
+              data-slot="item-description"
+              className={cn(
+                'line-clamp-2 text-left text-sm leading-normal font-normal text-muted-foreground group-data-[size=xs]/item:text-xs [&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-primary',
+                'Err' in de.state ? 'line-clamp-none' : undefined
+              )}
+            >
+              <DownloadStatus state={de.state} />
+            </div>
+          </ItemContent>
+        </Item>
+      ))}
+    </ItemGroup>
+  ) : (
+    <Empty>
+      <EmptyHeader>
+        <EmptyMedia variant={'icon'}>
+          <HardDriveDownload />
+        </EmptyMedia>
+        <EmptyTitle>暂无下载任务</EmptyTitle>
+        <EmptyDescription>
+          在<Link to="/library">动画库</Link>中选择剧集开始下载
+        </EmptyDescription>
+      </EmptyHeader>
+    </Empty>
+  )
+}
+
 function RouteComponent() {
   const { downloadEvents, streamStatus } = useDownloadEvent()
+  const downloadedQuery = useQuery({
+    queryKey: ['episode-downloaded'],
+    queryFn: async () => {
+      const resp = await fetch('/api/episodes/downloaded')
+
+      if (!resp.ok) {
+        throw await resp.json()
+      }
+      return resp.json() as Promise<Episode[]>
+    },
+    refetchInterval: 10 * 1000,
+  })
 
   return (
-    <div className="pr-2 pb-2">
-      <div
-        className={`mb-4 flex items-center gap-4 ${
-          downloadEvents.length ? 'justify-between' : 'justify-end'
-        }`}
-      >
-        {downloadEvents.length > 0 && (
-          <p className="text-muted-foreground">
-            共 {downloadEvents.length} 个任务
-          </p>
-        )}
+    <Tabs className="pr-2 pb-2">
+      <div className={`mb-4 flex items-center justify-between gap-4`}>
+        <div className="flex items-center gap-2">
+          <TabsList>
+            <TabsTrigger value="downloading">下载中</TabsTrigger>
+            <TabsTrigger value="downloaded">已下载</TabsTrigger>
+          </TabsList>
+          {downloadEvents.length > 0 && (
+            <p className="text-muted-foreground">
+              共 {downloadEvents.length} 个下载任务
+            </p>
+          )}
+        </div>
         <DownloadStreamStatus status={streamStatus} />
       </div>
-      {streamStatus === 'failed' && (
-        <Alert variant="destructive" className="mb-4">
-          <CircleAlert />
-          <AlertTitle>下载状态连接异常</AlertTitle>
-          <AlertDescription>
-            当前任务状态可能不是最新，页面仍会继续尝试重新连接。
-          </AlertDescription>
-        </Alert>
-      )}
-      {downloadEvents.length ? (
-        <ItemGroup className="gap-2">
-          {downloadEvents.map((de) => (
-            <Item key={de.episode.id} variant={'outline'} role="listitem">
-              <ItemMedia variant={'image'}>
-                <ImageWithFallback
-                  src={`/api/episodes/${de.episode.id}/cover`}
-                  width={32}
-                  height={32}
-                  className="object-cover"
-                  fallback={<ImageOff className="size-4" />}
-                />
-              </ItemMedia>
-              <ItemContent>
-                <ItemTitle className="line-clamp-1">
-                  第 {de.episode.episode} 集 - {de.episode.sn}
-                </ItemTitle>
-                <ItemDescription
-                  className={'Err' in de.state ? 'line-clamp-none' : undefined}
-                >
-                  <DownloadStatus de={de} />
-                </ItemDescription>
-              </ItemContent>
-            </Item>
-          ))}
-        </ItemGroup>
-      ) : (
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant={'icon'}>
-              <HardDriveDownload />
-            </EmptyMedia>
-            <EmptyTitle>暂无下载任务</EmptyTitle>
-            <EmptyDescription>
-              在<Link to="/library">动画库</Link>中选择剧集开始下载
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      )}
-    </div>
+      <TabsContent value="downloading">
+        {streamStatus === 'failed' && (
+          <Alert variant="destructive" className="mb-4">
+            <CircleAlert />
+            <AlertTitle>下载状态连接异常</AlertTitle>
+            <AlertDescription>
+              当前任务状态可能不是最新，页面仍会继续尝试重新连接。
+            </AlertDescription>
+          </Alert>
+        )}
+        <DownloadItems downloadEvents={downloadEvents} />
+      </TabsContent>
+      <TabsContent value="downloaded">
+        {downloadedQuery.error ? (
+          <Alert variant={'destructive'} className="mb-4">
+            <CircleAlert />
+            <AlertTitle>获取已下载的任务异常</AlertTitle>
+            <AlertDescription>{downloadedQuery.error.message}</AlertDescription>
+          </Alert>
+        ) : (
+          <DownloadItems
+            downloadEvents={
+              downloadedQuery.data?.map(
+                (d) =>
+                  ({
+                    episode: d,
+                    state: { Ok: { type: 'COMPLETED' } },
+                  }) satisfies DownloadEvent
+              ) ?? []
+            }
+          />
+        )}
+      </TabsContent>
+    </Tabs>
   )
 }
 
@@ -259,9 +310,17 @@ function useDownloadEvent() {
         )
       },
       onUpdate: (event) => {
-        setDownloadEventMap((previous) =>
-          new Map(previous).set(event.episode.sn, event)
-        )
+        if ('Ok' in event.state && event.state.Ok.type === 'COMPLETED') {
+          setDownloadEventMap((previous) => {
+            const cur = new Map(previous)
+            cur.delete(event.episode.sn)
+            return cur
+          })
+        } else {
+          setDownloadEventMap((previous) =>
+            new Map(previous).set(event.episode.sn, event)
+          )
+        }
       },
       onStatusChange: (status) => {
         setStreamStatus(status)
