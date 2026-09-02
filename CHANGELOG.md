@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.5](https://github.com/yuzheng14/ani-dock/compare/v0.1.4...v0.1.5) (2026-09-02)
+
+
+### Features
+
+* **frontend:** add bulk episode selection ([#95](https://github.com/yuzheng14/ani-dock/issues/95)) ([470c324](https://github.com/yuzheng14/ani-dock/commit/470c324613c0f1c3496c52d05f71932483792550)), closes [#8](https://github.com/yuzheng14/ani-dock/issues/8)
+* separate active and completed downloads ([#112](https://github.com/yuzheng14/ani-dock/issues/112)) ([f9ee1ad](https://github.com/yuzheng14/ani-dock/commit/f9ee1ad0d2e3272b5adca70600a58393a84185d6)), closes [#21](https://github.com/yuzheng14/ani-dock/issues/21)
+
+
+### Dependencies
+
+* Lock file maintenance pnpm lock file maintenance ([#108](https://github.com/yuzheng14/ani-dock/issues/108)) ([8f75d42](https://github.com/yuzheng14/ani-dock/commit/8f75d42ec90ce6775633bb1fe73f1d9c5f1f41be))
+* Update dependency pnpm to v11.24.0 ([#107](https://github.com/yuzheng14/ani-dock/issues/107)) ([f14cb0e](https://github.com/yuzheng14/ani-dock/commit/f14cb0e967dad6df0420ad53d2ee767e2089cefd))
+* Update dependency pnpm to v11.25.0 ([#113](https://github.com/yuzheng14/ani-dock/issues/113)) ([9ac1330](https://github.com/yuzheng14/ani-dock/commit/9ac13306dcda9181836885a07bd6d74217146c5f))
+
 ## [0.1.4](https://github.com/yuzheng14/ani-dock/compare/v0.1.3...v0.1.4) (2026-08-26)
 
 
