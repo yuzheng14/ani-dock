@@ -16,7 +16,7 @@ import type { Settings } from '@ani-dock/shared-type'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { AlertCircle, CircleCheck } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
 export const Route = createFileRoute('/settings')({
   component: RouteComponent,
@@ -34,11 +34,7 @@ function RouteComponent() {
     },
   })
 
-  const [form, setForm] = useState<Settings | null>(null)
-
-  useEffect(() => {
-    if (settingsQuery.data) setForm(settingsQuery.data)
-  }, [settingsQuery.data])
+  const [formChanges, setFormChanges] = useState<Partial<Settings>>({})
 
   const mutation = useMutation({
     mutationFn: async (settings: Settings) => {
@@ -54,8 +50,13 @@ function RouteComponent() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['settings'] })
+      setFormChanges({})
     },
   })
+
+  const form = settingsQuery.data
+    ? { ...settingsQuery.data, ...formChanges }
+    : null
 
   const skeleton = (
     <div className="flex flex-col gap-4 p-4">
@@ -86,7 +87,7 @@ function RouteComponent() {
   }
 
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) =>
-    setForm((prev) => (prev ? { ...prev, [key]: value } : prev))
+    setFormChanges((prev) => ({ ...prev, [key]: value }))
 
   return (
     <form
