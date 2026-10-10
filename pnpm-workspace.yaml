@@ -5,17 +5,6 @@ allowBuilds:
   esbuild: true
   msw: false
 
-patchedDependencies:
-  braces@3.0.3: patches/braces@3.0.3.patch
-
-# No upstream release fixes this advisory yet. The patch bounds parser nesting
-# and AST traversal; the audit job verifies it before applying this exception.
-# https://github.com/advisories/GHSA-vfj7-8cjw-p6xm
-# https://github.com/micromatch/braces/pull/78
-audit:
-  ignore:
-    - GHSA-vfj7-8cjw-p6xm
-
 minimumReleaseAgeExclude:
   - fast-uri@3.1.5
   - hono@4.12.34

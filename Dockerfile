@@ -10,10 +10,9 @@ RUN npm install -g pnpm@11.23.0
 
 WORKDIR /src
 
-# only copy dependency metadata and patches for better docker build cache
+# only copy metadata for better docker build cache
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY --parents packages/*/package.json ./
-COPY patches/ patches/
 
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
   pnpm config set store-dir /pnpm/store && \
