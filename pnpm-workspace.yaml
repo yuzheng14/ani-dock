@@ -5,6 +5,15 @@ allowBuilds:
   esbuild: true
   msw: false
 
+# Reviewed 2026-10-10: no upstream release fixes this advisory yet.
+# braces is used only by the shadcn development CLI for local glob patterns;
+# it is absent from the application's production dependency graph.
+# This exception does not fix the vulnerability. Remove it when an official fix is released.
+# https://github.com/advisories/GHSA-vfj7-8cjw-p6xm
+audit:
+  ignore:
+    - GHSA-vfj7-8cjw-p6xm
+
 minimumReleaseAgeExclude:
   - fast-uri@3.1.5
   - hono@4.12.34
