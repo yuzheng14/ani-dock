@@ -35,6 +35,12 @@ jobs:
           runtime: node@24
           install: false
 
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify braces security patch
+        run: node --test scripts/braces-patch.test.mjs
+
       - name: Audit frontend dependencies
         run: pnpm audit --audit-level high
 
