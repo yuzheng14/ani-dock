@@ -28,7 +28,7 @@ RUN pnpm --filter @ani-dock/frontend build
 # Backend builder
 # ============================================================
 
-FROM rust:1.98-trixie AS backend
+FROM rust:1.99-trixie AS backend
 
 RUN apt update && apt install -y --no-install-recommends \
   cmake \
